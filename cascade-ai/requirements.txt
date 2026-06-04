@@ -1,0 +1,7 @@
+bnb-chain-agentkit
+langchain
+python-dotenv
+requests
+web3
+pydantic
+pytest
