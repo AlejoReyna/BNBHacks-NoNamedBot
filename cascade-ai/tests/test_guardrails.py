@@ -40,10 +40,15 @@ def test_rejects_slippage_over_one_percent(tmp_path: Path) -> None:
         guardrails.validate_new_trade("CAKE", 100.0, 10000.0, 0.011)
 
 
-def test_rejects_missing_or_zero_slippage(tmp_path: Path) -> None:
+def test_rejects_negative_slippage(tmp_path: Path) -> None:
     guardrails = Guardrails(_settings(tmp_path))
     with pytest.raises(ValueError, match="slippage"):
-        guardrails.validate_new_trade("CAKE", 100.0, 10000.0, 0.0)
+        guardrails.validate_new_trade("CAKE", 100.0, 10000.0, -0.001)
+
+
+def test_accepts_zero_slippage_from_dex_price_impact(tmp_path: Path) -> None:
+    guardrails = Guardrails(_settings(tmp_path))
+    guardrails.validate_new_trade("CAKE", 100.0, 10000.0, 0.0)
 
 
 def test_max_daily_trades_blocks_fourth_trade(tmp_path: Path) -> None:

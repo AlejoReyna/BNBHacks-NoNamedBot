@@ -75,7 +75,12 @@ class PancakeSwapRouter:
         if max_slippage_pct > self.HARD_SLIPPAGE_CAP_PCT:
             raise ValueError("swap slippage cap cannot exceed 1%")
 
-        result = self.twak_interface.swap(from_symbol, to_symbol, amount, max_slippage_pct)
+        from src.config.tokens import resolve_twak_token
+
+        from_arg = resolve_twak_token(from_symbol)
+        to_arg = resolve_twak_token(to_symbol)
+
+        result = self.twak_interface.swap(from_arg, to_arg, amount, max_slippage_pct)
         self._enforce_output_floor(result, amount, max_slippage_pct, expected_amount_out)
         return result
 

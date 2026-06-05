@@ -6,7 +6,7 @@ import os
 from typing import Any, Optional
 
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Settings(BaseModel):
@@ -22,6 +22,15 @@ class Settings(BaseModel):
     cmc_x402_endpoint: str = "https://mcp.coinmarketcap.com/x402/mcp"
     cmc_x402_amount: float = 0.01
     cmc_x402_asset: str = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    cmc_mcp_enabled: bool = False
+    cmc_mcp_shadow_mode: bool = True
+    cmc_mcp_url: str = "https://mcp.coinmarketcap.com/x402/mcp"
+    # Do not add CMC_X402_EPHEMERAL_KEY here. Settings is passed into execution
+    # objects, and x402 data micropayment keys must stay isolated in src.data.
+    cmc_x402_chain_id: int = 8453
+    cmc_x402_max_usdc_per_call: float = 0.01
+    use_keyless_primary: bool = True
+    cmc_keyless_base_url: str = "https://pro-api.coinmarketcap.com/trial-pro-api/v3"
     paper_trade: bool = True
     loop_seconds: int = 300
     max_position_pct: float = 0.05
@@ -31,10 +40,25 @@ class Settings(BaseModel):
     drawdown_kill_switch_pct: float = 0.20
     trailing_stop_pct: float = 0.035
     take_profit_pct: float = 0.08
-    min_entry_factors: int = 4
+    # One-week competition window: require BNB to be only mildly weak at worst
+    # so entries are not opened into broad-market rollovers that increase drawdown.
+    bnb_regime_threshold: float = -0.01
+    # One-week competition window: token must already be flat-to-positive on 1h
+    # while avoiding severe 24h downtrends; these are fail-closed drawdown guards.
+    token_regime_1h_min: float = 0.0025
+    token_regime_24h_min: float = -0.08
+    # One-week competition window: 3h highs catch breakouts earlier, while the
+    # 0.2% buffer avoids chasing tiny noisy ticks that can inflate drawdown.
+    breakout_lookback_hours: int = 3
+    breakout_buffer: float = 0.002
+    # Minimum passing count across the four core entry factors; slippage remains mandatory.
+    min_entry_factors: int = Field(default=4, ge=1, le=4)
     log_level: str = "INFO"
+    demo_mode: bool = False
     position_state_path: str = "positions.json"
     guardrail_state_path: str = "guardrail_state.json"
+    execution_log_path: str = "execution_log.jsonl"
+    decision_log_path: str = "decision_log.jsonl"
 
 
 def _get_bool(name: str, default: bool) -> bool:
@@ -83,6 +107,19 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         ),
         "cmc_x402_amount": _get_float("CMC_X402_AMOUNT", 0.01),
         "cmc_x402_asset": os.getenv("CMC_X402_ASSET", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
+        "cmc_mcp_enabled": _get_bool("CMC_MCP_ENABLED", False),
+        "cmc_mcp_shadow_mode": _get_bool("CMC_MCP_SHADOW_MODE", True),
+        "cmc_mcp_url": os.getenv(
+            "CMC_MCP_URL",
+            os.getenv("CMC_X402_ENDPOINT", "https://mcp.coinmarketcap.com/x402/mcp"),
+        ),
+        "cmc_x402_chain_id": _get_int("CMC_X402_CHAIN_ID", 8453),
+        "cmc_x402_max_usdc_per_call": _get_float("CMC_X402_MAX_USDC_PER_CALL", 0.01),
+        "use_keyless_primary": _get_bool("USE_KEYLESS_PRIMARY", True),
+        "cmc_keyless_base_url": os.getenv(
+            "CMC_KEYLESS_BASE_URL",
+            "https://pro-api.coinmarketcap.com/trial-pro-api/v3",
+        ),
         "paper_trade": _get_bool("PAPER_TRADE", True),
         "loop_seconds": _get_int("LOOP_SECONDS", 300),
         "max_position_pct": _get_float("MAX_POSITION_PCT", 0.05),
@@ -92,9 +129,17 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "drawdown_kill_switch_pct": _get_float("DRAWDOWN_KILL_SWITCH_PCT", 0.20),
         "trailing_stop_pct": _get_float("TRAILING_STOP_PCT", 0.035),
         "take_profit_pct": _get_float("TAKE_PROFIT_PCT", 0.08),
+        "bnb_regime_threshold": _get_float("BNB_REGIME_THRESHOLD", -0.01),
+        "token_regime_1h_min": _get_float("TOKEN_REGIME_1H_MIN", 0.0025),
+        "token_regime_24h_min": _get_float("TOKEN_REGIME_24H_MIN", -0.08),
+        "breakout_lookback_hours": _get_int("BREAKOUT_LOOKBACK_HOURS", 3),
+        "breakout_buffer": _get_float("BREAKOUT_BUFFER", 0.002),
         "min_entry_factors": _get_int("MIN_ENTRY_FACTORS", 4),
         "log_level": os.getenv("LOG_LEVEL", "INFO"),
+        "demo_mode": _get_bool("DEMO_MODE", False),
         "position_state_path": os.getenv("POSITION_STATE_PATH", "positions.json"),
         "guardrail_state_path": os.getenv("GUARDRAIL_STATE_PATH", "guardrail_state.json"),
+        "execution_log_path": os.getenv("EXECUTION_LOG_PATH", "execution_log.jsonl"),
+        "decision_log_path": os.getenv("DECISION_LOG_PATH", "decision_log.jsonl"),
     }
     return Settings(**values)

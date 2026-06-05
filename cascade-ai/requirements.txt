@@ -1,7 +1,11 @@
 bnb-chain-agentkit
+eth-account>=0.13.0
+httpx>=0.27.0
 langchain
-python-dotenv
+mcp>=1.9.0
+pydantic>=2.7
+python-dotenv>=1.0.1
 requests
-web3
-pydantic
+tenacity>=8.2.3
+web3>=6.20.0
 pytest

@@ -11,5 +11,8 @@ build/
 .coverage
 htmlcov/
 positions.json
+artifacts/*
+!artifacts/.gitkeep
 test_agentkit.py
 test_x402_raw.py
+context.md

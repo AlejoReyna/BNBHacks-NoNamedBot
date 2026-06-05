@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from src.config.settings import Settings
@@ -16,6 +18,7 @@ def test_emergency_liquidate_defaults_to_live_mode(monkeypatch: object, tmp_path
         paper_trade=True,
         position_state_path=str(state_path),
         guardrail_state_path=str(guardrail_path),
+        execution_log_path=str(tmp_path / "execution_log.jsonl"),  # type: ignore[operator]
     )
     seeded = PositionManager(settings)
     seeded.open_position("CAKE", amount_tokens=2.0, entry_price=3.0, entry_value_usdc=6.0)
@@ -31,7 +34,7 @@ def test_emergency_liquidate_defaults_to_live_mode(monkeypatch: object, tmp_path
 
         def swap(self, from_symbol: str, to_symbol: str, amount: float, slippage_pct: float) -> dict[str, object]:
             observed["swap"] = (from_symbol, to_symbol, amount, slippage_pct)
-            return {"amount_out": amount}
+            return {"amount_out": amount, "tx_hash": "0x" + "1" * 64}
 
     monkeypatch.setattr(main_module, "load_settings", lambda: settings)  # type: ignore[attr-defined]
     monkeypatch.setattr(main_module, "BnbToolkitWrapper", FakeToolkit)  # type: ignore[attr-defined]
@@ -40,7 +43,7 @@ def test_emergency_liquidate_defaults_to_live_mode(monkeypatch: object, tmp_path
     assert main_module.main(["--emergency-liquidate"]) == 0
     assert observed["paper_trade"] is False
     assert observed["twak_paper_trade"] is False
-    assert observed["swap"] == ("CAKE", "USDC", 2.0, 0.01)
+    assert observed["swap"] == ("0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 2.0, 0.01)
 
 
 def test_balance_command_reads_live_balances(monkeypatch: object, capsys: object) -> None:
@@ -127,6 +130,57 @@ def test_once_command_limits_live_run_to_one_cycle(monkeypatch: object) -> None:
     assert observed == {"paper_trade": False, "max_cycles": 1}
 
 
+def test_demo_mode_flag_is_passed_to_run_agent(monkeypatch: object) -> None:
+    settings = Settings(paper_trade=True, demo_mode=False)
+    observed: dict[str, object] = {}
+
+    def fake_run_agent(live_settings: Settings, max_cycles: int | None = None) -> None:
+        observed["paper_trade"] = live_settings.paper_trade
+        observed["demo_mode"] = live_settings.demo_mode
+        observed["max_cycles"] = max_cycles
+
+    monkeypatch.setattr(main_module, "load_settings", lambda: settings)  # type: ignore[attr-defined]
+    monkeypatch.setattr(main_module, "run_agent", fake_run_agent)  # type: ignore[attr-defined]
+
+    assert main_module.main(["--live", "--once", "--demo-mode"]) == 0
+    assert observed == {"paper_trade": False, "demo_mode": True, "max_cycles": 1}
+
+
+def test_demo_cycle_summary_prints_clean_signal(capsys: object) -> None:
+    decision = main_module.BreakoutDecision(
+        should_enter=True,
+        symbol="CAKE",
+        position_size_usdc=100.0,
+        factor_scores={"slippage_under_cap": True},
+        true_factor_count=6,
+        reason="4/4 core factors passed (6/6 total)",
+        estimated_slippage_pct=0.005,
+    )
+
+    main_module._print_demo_cycle_summary(
+        1,
+        {"CAKE": {"symbol": "CAKE", "price": 2.0}},
+        10000.0,
+        decision,
+        entries_allowed=True,
+        position_count=1,
+    )
+
+    output = capsys.readouterr().out  # type: ignore[attr-defined]
+    assert "Cycle 1 summary" in output
+    assert "Portfolio: $10,000.00" in output
+    assert "Signal: ENTER CAKE factors=6/6 slippage=0.50%" in output
+    assert "Reason: 4/4 core factors passed (6/6 total)" in output
+
+
+class FakeTWAKSlippage:
+    def __init__(self, slippage: float | None) -> None:
+        self.slippage = slippage
+
+    def estimate_slippage_pct(self, *args: object, **kwargs: object) -> float | None:
+        return self.slippage
+
+
 def test_entry_aborts_before_router_when_slippage_is_missing(tmp_path: object) -> None:
     settings = Settings(
         position_state_path=str(tmp_path / "positions.json"),  # type: ignore[operator]
@@ -159,7 +213,140 @@ def test_entry_aborts_before_router_when_slippage_is_missing(tmp_path: object) -
         guardrails,
         {"CAKE": {"price": 2.0, "estimated_slippage_pct": None}},
         10000.0,
+        FakeTWAKSlippage(None),  # type: ignore[arg-type]
     )
 
     assert router.calls == 0
     assert position_manager.get_position("CAKE") is None
+
+
+def test_entry_does_not_open_live_position_without_swap_hash(tmp_path: object) -> None:
+    settings = Settings(
+        paper_trade=False,
+        position_state_path=str(tmp_path / "positions.json"),  # type: ignore[operator]
+        guardrail_state_path=str(tmp_path / "guardrail_state.json"),  # type: ignore[operator]
+        execution_log_path=str(tmp_path / "execution_log.jsonl"),  # type: ignore[operator]
+    )
+    position_manager = PositionManager(settings)
+    guardrails = main_module.Guardrails(settings)
+    decision = main_module.BreakoutDecision(
+        should_enter=True,
+        symbol="CAKE",
+        position_size_usdc=100.0,
+        factor_scores={"slippage_under_cap": True},
+        true_factor_count=5,
+        reason="test",
+    )
+
+    class FakeRouter:
+        calls: list[tuple[object, ...]] = []
+
+        def swap_exact_in(self, *args: object, **kwargs: object) -> dict[str, object]:
+            self.calls.append((*args, kwargs))
+            return {"mode": "twak", "tool": "swap"}
+
+    router = FakeRouter()
+
+    main_module._maybe_enter_position(
+        decision,
+        position_manager,
+        router,  # type: ignore[arg-type]
+        guardrails,
+        {"CAKE": {"price": 2.0, "estimated_slippage_pct": 0.002}},
+        10000.0,
+        FakeTWAKSlippage(0.002),  # type: ignore[arg-type]
+    )
+
+    assert len(router.calls) == 1
+    assert position_manager.get_position("CAKE") is None
+    log_record = json.loads((tmp_path / "execution_log.jsonl").read_text(encoding="utf-8").strip())  # type: ignore[operator]
+    assert log_record["action"] == "entry"
+    assert log_record["result"] == {"mode": "twak", "tool": "swap"}
+    assert "tx_hash" not in log_record
+
+
+def test_entry_opens_paper_position_with_paper_swap_hash(tmp_path: object) -> None:
+    settings = Settings(
+        paper_trade=True,
+        position_state_path=str(tmp_path / "positions.json"),  # type: ignore[operator]
+        guardrail_state_path=str(tmp_path / "guardrail_state.json"),  # type: ignore[operator]
+        execution_log_path=str(tmp_path / "execution_log.jsonl"),  # type: ignore[operator]
+    )
+    position_manager = PositionManager(settings)
+    guardrails = main_module.Guardrails(settings)
+    decision = main_module.BreakoutDecision(
+        should_enter=True,
+        symbol="CAKE",
+        position_size_usdc=100.0,
+        factor_scores={"slippage_under_cap": True},
+        true_factor_count=5,
+        reason="test",
+    )
+
+    class FakeRouter:
+        def swap_exact_in(self, *args: object, **kwargs: object) -> dict[str, object]:
+            return {
+                "mode": "paper",
+                "tool": "twak-swap",
+                "tx_hash": "paper-twak-swap-USDC-CAKE",
+            }
+
+    main_module._maybe_enter_position(
+        decision,
+        position_manager,
+        FakeRouter(),  # type: ignore[arg-type]
+        guardrails,
+        {"CAKE": {"price": 2.0, "estimated_slippage_pct": 0.002}},
+        10000.0,
+        FakeTWAKSlippage(0.002),  # type: ignore[arg-type]
+    )
+
+    position = position_manager.get_position("CAKE")
+    assert position is not None
+    assert position.amount_tokens == 50.0
+    log_record = json.loads((tmp_path / "execution_log.jsonl").read_text(encoding="utf-8").strip())  # type: ignore[operator]
+    assert log_record["tx_hash"] == "paper-twak-swap-USDC-CAKE"
+
+
+def test_entry_reuses_decision_slippage_without_second_quote(tmp_path: object) -> None:
+    settings = Settings(
+        paper_trade=True,
+        position_state_path=str(tmp_path / "positions.json"),  # type: ignore[operator]
+        guardrail_state_path=str(tmp_path / "guardrail_state.json"),  # type: ignore[operator]
+        execution_log_path=str(tmp_path / "execution_log.jsonl"),  # type: ignore[operator]
+    )
+    position_manager = PositionManager(settings)
+    guardrails = main_module.Guardrails(settings)
+    decision = main_module.BreakoutDecision(
+        should_enter=True,
+        symbol="CAKE",
+        position_size_usdc=100.0,
+        factor_scores={"slippage_under_cap": True},
+        true_factor_count=6,
+        reason="test",
+        estimated_slippage_pct=0.002,
+    )
+
+    class FakeRouter:
+        def swap_exact_in(self, *args: object, **kwargs: object) -> dict[str, object]:
+            return {
+                "mode": "paper",
+                "tool": "twak-swap",
+                "tx_hash": "paper-twak-swap-USDC-CAKE",
+            }
+
+    class NoQuoteTWAK:
+        def estimate_slippage_pct(self, *args: object, **kwargs: object) -> float:
+            raise AssertionError("decision slippage should be reused")
+
+    main_module._maybe_enter_position(
+        decision,
+        position_manager,
+        FakeRouter(),  # type: ignore[arg-type]
+        guardrails,
+        {"CAKE": {"price": 2.0}},
+        10000.0,
+        NoQuoteTWAK(),  # type: ignore[arg-type]
+    )
+
+    assert position_manager.get_position("CAKE") is not None

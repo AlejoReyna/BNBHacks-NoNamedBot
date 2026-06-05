@@ -50,4 +50,4 @@ def test_router_accepts_output_at_one_percent_floor() -> None:
 
     result = router.swap_exact_in("USDC", "CAKE", 100.0, 0.01)
     assert result["amount_out"] == 99.0
-    assert twak.calls == [("USDC", "CAKE", 100.0, 0.01)]
+    assert twak.calls == [("0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", 100.0, 0.01)]

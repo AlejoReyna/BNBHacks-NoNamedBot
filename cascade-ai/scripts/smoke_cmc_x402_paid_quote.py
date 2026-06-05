@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""Smoke test a paid CMC MCP quote request through TWAK-native x402."""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import uuid
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from src.data.x402_client import CMC_X402_ENDPOINT, DEFAULT_PAYMENT_ASSET, X402Client  # noqa: E402
+
+
+def run() -> int:
+    os.chdir(ROOT)
+    load_dotenv(ROOT / ".env")
+
+    client = X402Client(
+        endpoint=os.getenv("CMC_MCP_URL", os.getenv("CMC_X402_ENDPOINT", CMC_X402_ENDPOINT)),
+        default_amount=os.getenv("CMC_X402_AMOUNT", "0.01"),
+        default_asset=os.getenv("CMC_X402_ASSET", DEFAULT_PAYMENT_ASSET),
+    )
+    envelope = {
+        "jsonrpc": "2.0",
+        "id": str(uuid.uuid4()),
+        "method": "tools/call",
+        "params": {
+            "name": "get_crypto_quotes_latest",
+            "arguments": {"symbol": "BNB", "convert": "USD"},
+        },
+    }
+    result = client.request_with_x402(
+        "POST",
+        envelope,
+        headers={"MCP-Protocol-Version": "2024-11-05"},
+    )
+    if result is None:
+        print("twak_x402_paid_quote_failed=true", file=sys.stderr)
+        return 1
+
+    output_path = ROOT / "artifacts" / "x402_twak_paid_quote_success.json"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(result, indent=2, sort_keys=True, default=str), encoding="utf-8")
+    print(f"twak_x402_paid_quote_success={output_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(run())

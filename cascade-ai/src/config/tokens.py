@@ -54,6 +54,12 @@ TOKEN_CONTRACTS_BSC: dict[str, str] = {
     "FIL": "0x0D8Ce2A99Bb6e3B7Db580ED848240e4a0F9aE153",
 }
 
+# TWAK/LiquidMesh token identifiers (symbols resolved to BSC contract addresses).
+TOKEN_CONTRACTS: dict[str, str] = {
+    "BNB": "BNB",
+    **TOKEN_CONTRACTS_BSC,
+}
+
 CMC_IDS_BY_SYMBOL: dict[str, str] = {
     "ETH": "1027",
     "USDT": "825",
@@ -231,6 +237,21 @@ ELIGIBLE_149_SYMBOLS: list[str] = [
     "XAUM",
 ]
 
+LIQUIDITY_BLACKLIST: set[str] = {
+    "lisUSD",
+    "ALE",
+    "DUCKY",
+    "SMILEK",
+    "BDCA",
+    "NILA",
+    "LUR",
+}
+
+# One-week competition window: these hard floors avoid opening into tokens where
+# slippage and thin books can dominate expected PnL without improving drawdown.
+MIN_VOLUME_24H_USD = 5_000_000
+MIN_MARKET_CAP_USD = 50_000_000
+
 
 def is_target_symbol(symbol: str) -> bool:
     """Return whether a symbol is in the strict 20-token target universe."""
@@ -242,6 +263,18 @@ def is_tradable_symbol(symbol: str) -> bool:
     """Return whether a symbol may be opened as a directional trade."""
 
     return symbol.strip().upper() in TRADABLE_TARGET_SYMBOLS
+
+
+def is_liquid(token_data: dict[str, object]) -> bool:
+    """Return whether a token clears hard blacklist and minimum liquidity floors."""
+
+    symbol = str(token_data.get("symbol", "")).strip().upper()
+    blacklisted = {blocked.upper() for blocked in LIQUIDITY_BLACKLIST}
+    if symbol in blacklisted:
+        return False
+    volume_24h = _number(token_data.get("volume_24h"), 0.0)
+    market_cap = _number(token_data.get("market_cap"), 0.0)
+    return volume_24h >= MIN_VOLUME_24H_USD and market_cap >= MIN_MARKET_CAP_USD
 
 
 def assert_target_symbol(symbol: str) -> None:
@@ -258,6 +291,15 @@ def assert_tradable_symbol(symbol: str) -> None:
     normalized = symbol.strip().upper()
     if normalized not in TRADABLE_TARGET_SYMBOLS:
         raise ValueError(f"{normalized} is not in the tradable target allowlist")
+
+
+def resolve_twak_token(symbol: str) -> str:
+    """Return the TWAK CLI token argument for a symbol or pass through addresses."""
+
+    normalized = symbol.strip().upper()
+    if normalized.startswith("0X") and len(normalized) == 42:
+        return symbol.strip()
+    return TOKEN_CONTRACTS.get(normalized, symbol.strip())
 
 
 def get_bsc_token_address(symbol: str) -> str:
@@ -280,3 +322,10 @@ def get_cmc_id(symbol: str) -> str:
         return CMC_IDS_BY_SYMBOL[normalized]
     except KeyError as exc:
         raise ValueError(f"No CoinMarketCap ID configured for {normalized}") from exc
+
+
+def _number(value: object, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default

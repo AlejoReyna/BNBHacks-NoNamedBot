@@ -60,8 +60,8 @@ class Guardrails:
             raise ValueError(
                 f"position value {position_value_usdc:.2f} exceeds max {max_position_value:.2f}"
             )
-        if estimated_slippage_pct <= 0:
-            raise ValueError("estimated slippage must be greater than zero")
+        if estimated_slippage_pct < 0:
+            raise ValueError("estimated slippage must not be negative")
         if estimated_slippage_pct > self.settings.max_slippage_pct:
             raise ValueError(
                 f"estimated slippage {estimated_slippage_pct:.4f} exceeds cap {self.settings.max_slippage_pct:.4f}"
