@@ -234,6 +234,40 @@ def test_scalping_consecutive_loss_cooldown() -> None:
     assert guardrails.check_consecutive_loss_cooldown() is True
 
 
+def test_scalping_micro_momentum_uses_volume_24h_proxy_with_realistic_threshold() -> None:
+    settings = _settings()
+    cache = PriceCache()
+    now = datetime.now(timezone.utc)
+    base_volume = 6_000_000.0
+    for index in range(11):
+        cache.add_ohlcv(
+            "CAKE",
+            10.0,
+            10.1,
+            9.9,
+            10.0 + index * 0.01,
+            base_volume * 0.5,
+            now - timedelta(minutes=5 * (11 - index)),
+        )
+    cache.add_ohlcv(
+        "CAKE",
+        10.2,
+        10.3,
+        10.1,
+        10.2,
+        base_volume * 1.06,
+        now,
+    )
+    engine = ScalpingEngine(settings, cache)
+    _, factors = engine.score_token(
+        "CAKE",
+        _token_payload(price=10.2, volume_24h=base_volume),
+        _regime(),
+        _sentiment(gas_price_gwei=1.0),
+    )
+    assert factors["micro_momentum"] is True
+
+
 def test_scalping_true_factor_count_matches_factor_booleans() -> None:
     settings = _settings()
     cache = PriceCache()

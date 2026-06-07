@@ -119,6 +119,33 @@ def test_dual_cache_refreshes_keyless_more_often_than_x402(monkeypatch: object) 
     assert keyless_calls["count"] == 2
 
 
+def test_merge_market_snapshots_does_not_overlay_zero_or_empty_values() -> None:
+    base = {
+        "CAKE": {
+            "symbol": "CAKE",
+            "price": 2.5,
+            "market_cap": 800_000_000.0,
+            "volume_24h": 5_000_000.0,
+        }
+    }
+    overlay = {
+        "CAKE": {
+            "symbol": "CAKE",
+            "price": 0,
+            "market_cap": 0,
+            "volume_24h": None,
+            "percent_change_1h": "",
+        }
+    }
+
+    merged = merge_market_snapshots(base, overlay)
+
+    assert merged["CAKE"]["price"] == 2.5
+    assert merged["CAKE"]["market_cap"] == 800_000_000.0
+    assert merged["CAKE"]["volume_24h"] == 5_000_000.0
+    assert "percent_change_1h" not in merged["CAKE"]
+
+
 def test_dual_cache_reset_clears_both_layers() -> None:
     cache = DualMarketSnapshotCache()
     cache.get_merged_snapshot(

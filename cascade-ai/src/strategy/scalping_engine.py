@@ -313,7 +313,7 @@ class ScalpingEngine:
         volume_latest = self._latest_volume(symbol)
         avg_volume = self._average_hourly_volume(symbol)
         if volume_latest is not None and avg_volume is not None and avg_volume > 0:
-            return volume_latest > avg_volume * 1.02
+            return volume_latest > avg_volume * 1.05
 
         return False
 

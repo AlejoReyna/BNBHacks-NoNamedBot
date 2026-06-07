@@ -332,6 +332,33 @@ def test_fetch_x402_enriched_snapshot_merges_x402_quotes_and_keyless_metrics(mon
     assert snapshot["CAKE"]["percent_change_1h"] == 0.3
 
 
+def test_build_enriched_snapshot_skips_zero_market_cap_and_volume() -> None:
+    combined = [
+        {"market_cap": 0, "volume_24h": 0, "price": 0},
+        {"market_cap": 800_000_000.0, "volume_24h": 5_000_000.0, "price": 2.5},
+    ]
+
+    market_cap = CMCMCPClient._first_number_from_many(
+        combined,
+        ("market_cap", "quote.USD.market_cap"),
+        skip_zero=True,
+    )
+    volume_24h = CMCMCPClient._first_number_from_many(
+        combined,
+        ("volume_24h", "volume_24h_usd"),
+        skip_zero=True,
+    )
+    price = CMCMCPClient._first_number_from_many(
+        combined,
+        ("price", "last_price", "quote.USD.price"),
+        skip_zero=True,
+    )
+
+    assert market_cap == 800_000_000.0
+    assert volume_24h == 5_000_000.0
+    assert price == 2.5
+
+
 def test_fetch_x402_enriched_snapshot_estimates_slippage_when_missing(monkeypatch: Any) -> None:
     class PaidX402Client:
         def request_with_x402(self, method: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
