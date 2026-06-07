@@ -7,7 +7,7 @@ from typing import Any
 import requests
 
 from src.config.settings import Settings
-from src.data.cmc_mcp_client import CMCMCPClient
+from src.data.cmc_mcp_client import CMCMCPClient, CmcMcpClient
 
 
 class FakeX402Client:
@@ -113,6 +113,40 @@ def test_normalize_keyless_list_response() -> None:
     normalized = CMCMCPClient._normalize_keyless_quotes_payload(payload)
     assert normalized["data"]["CAKE"]["price"] == 2.5
     assert normalized["data"]["CAKE"]["volume_24h"] == 1000.0
+
+
+def test_extract_tool_result_parses_x402_quote_list() -> None:
+    payload = {
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": '[{"symbol":"BNB","price":589.0,"volume_24h":1000000.0,"market_cap":79000000000.0}]',
+                }
+            ]
+        }
+    }
+    parsed = CmcMcpClient._extract_tool_result(payload)
+    assert parsed["data"]["BNB"]["price"] == 589.0
+
+
+def test_x402_primary_call_parses_mcp_content() -> None:
+    class PaidX402Client:
+        def request_with_x402(self, method: str, envelope: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+            return {
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": '[{"symbol":"CAKE","price":2.5,"volume_24h":5000000.0,"market_cap":800000000.0}]',
+                        }
+                    ]
+                }
+            }
+
+    client = CMCMCPClient(Settings(use_keyless_primary=False), x402_client=PaidX402Client())  # type: ignore[arg-type]
+    result = client.get_crypto_quotes_latest(["CAKE"])
+    assert result["data"]["CAKE"]["price"] == 2.5
 
 
 def test_keyless_primary_uses_symbol_query(monkeypatch: Any) -> None:

@@ -210,6 +210,16 @@ class CmcMcpClient:
                     continue
                 if isinstance(parsed, dict):
                     return parsed
+                if isinstance(parsed, list):
+                    by_symbol: dict[str, Any] = {}
+                    for item in parsed:
+                        if not isinstance(item, dict):
+                            continue
+                        symbol = str(item.get("symbol") or "").strip().upper()
+                        if symbol:
+                            by_symbol[symbol] = item
+                    if by_symbol:
+                        return {"data": by_symbol}
         return result
 
     def _ensure_enabled(self) -> None:
@@ -284,6 +294,9 @@ class CMCMCPClient:
             LOGGER.warning("CMC quotes unavailable; skipping remaining market snapshot calls")
             return {}
 
+        if not self.settings.use_keyless_primary:
+            return self._snapshot_from_quotes(normalized_symbols, quotes)
+
         technicals = self._fetch_combined_payload(
             normalized_symbols,
             self.get_crypto_technical_analysis,
@@ -353,6 +366,47 @@ class CMCMCPClient:
             }
         return snapshot
 
+    def _snapshot_from_quotes(
+        self,
+        normalized_symbols: list[str],
+        quotes: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Build a strategy snapshot from paid x402 quote payloads only."""
+
+        quotes_by_symbol = self._by_symbol(quotes)
+        bnb_trend = self._first_number(
+            quotes_by_symbol.get("BNB", quotes_by_symbol.get("WBNB", {})),
+            ("bnb_1h_trend_pct", "percent_change_1h", "price_change_percentage_1h", "change_1h"),
+        )
+        snapshot: dict[str, Any] = {}
+        for symbol in normalized_symbols:
+            quote_data = quotes_by_symbol.get(symbol, {})
+            volume_24h = self._first_number_from_many([quote_data], ("volume_24h", "volume_24h_usd"))
+            snapshot[symbol] = {
+                "symbol": symbol,
+                "price": self._first_number_from_many([quote_data], ("price", "last_price", "quote.USD.price")),
+                "market_cap": self._first_number_from_many([quote_data], ("market_cap", "quote.USD.market_cap")),
+                "volume_1h": self._first_number_from_many([quote_data], ("volume_1h", "volume_1h_usd")),
+                "volume_24h": volume_24h,
+                "percent_change_1h": self._first_number_from_many(
+                    [quote_data],
+                    ("percent_change_1h", "quote.USD.percent_change_1h", "price_change_percentage_1h", "change_1h"),
+                ),
+                "percent_change_24h": self._first_number_from_many(
+                    [quote_data],
+                    (
+                        "percent_change_24h",
+                        "quote.USD.percent_change_24h",
+                        "price_change_percentage_24h",
+                        "change_24h",
+                    ),
+                ),
+                "rolling_24h_hourly_volume_avg": volume_24h / 24 if volume_24h else None,
+                "bnb_1h_trend_pct": bnb_trend,
+            }
+        LOGGER.info("Built x402 quotes-only snapshot for %d symbols", len(snapshot))
+        return snapshot
+
     def _call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         envelope = {
             "jsonrpc": "2.0",
@@ -389,19 +443,18 @@ class CMCMCPClient:
             if payload is None:
                 raise RuntimeError("x402 client returned None")
         except Exception as exc:
-            LOGGER.warning(
-                "CMC MCP x402 call %s failed; using Keyless trial API: %s",
-                tool_name,
-                exc,
-            )
-            payload = self._fetch_keyless(tool_name, arguments)
+            LOGGER.warning("CMC MCP x402 call %s failed: %s", tool_name, exc)
+            if self.settings.cmc_api_key:
+                payload = self._fetch_keyless(tool_name, arguments)
+            else:
+                return {}
 
         if not isinstance(payload, dict):
             LOGGER.warning("CMC MCP call %s returned non-dict JSON; using empty fallback", tool_name)
             return {}
-        result = payload.get("result", payload)
-        if isinstance(result, dict):
-            return result
+        parsed = CmcMcpClient._extract_tool_result(payload)
+        if isinstance(parsed, dict):
+            return parsed
         LOGGER.warning("CMC MCP call %s returned an unexpected result shape; using empty fallback", tool_name)
         return {}
 

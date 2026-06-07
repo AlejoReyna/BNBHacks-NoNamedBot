@@ -91,6 +91,17 @@ def test_load_settings_does_not_expose_cmc_ephemeral_key(monkeypatch: object, tm
     assert not hasattr(settings, "cmc_x402_private_key")
 
 
+def test_load_settings_disables_keyless_without_api_key(monkeypatch: object, tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text("USE_KEYLESS_PRIMARY=true\n", encoding="utf-8")
+    monkeypatch.delenv("CMC_API_KEY", raising=False)
+
+    settings = load_settings(str(env_path))
+
+    assert settings.use_keyless_primary is False
+    assert settings.cmc_api_key is None
+
+
 def test_min_entry_factors_is_bounded_to_core_factor_count() -> None:
     assert Settings(min_entry_factors=4).min_entry_factors == 4
 

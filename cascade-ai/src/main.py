@@ -238,11 +238,11 @@ def run_live_preflight(settings: Settings) -> bool:
         fetched_snapshot = cmc_client.fetch_market_snapshot(TARGET_SYMBOLS)
         if isinstance(fetched_snapshot, dict):
             snapshot = fetched_snapshot
-            record("CMC/x402 market snapshot", bool(snapshot), f"{len(snapshot)} item(s)")
+            record("CMC x402 market snapshot", bool(snapshot), f"{len(snapshot)} item(s)")
         else:
-            record("CMC/x402 market snapshot", False, "non-dict snapshot")
+            record("CMC x402 market snapshot", False, "non-dict snapshot")
     except Exception as exc:  # pragma: no cover - exercised by CLI tests with fakes
-        record("CMC/x402 market snapshot", False, _safe_error(exc))
+        record("CMC x402 market snapshot", False, _safe_error(exc))
 
     priced_targets = _priced_target_symbols(snapshot)
     record(
@@ -1460,7 +1460,7 @@ def _ensure_bnb_reference(snapshot: dict[str, dict[str, Any]], cmc_client: CMCMC
         snapshot["BNB"] = {"symbol": "BNB", **snapshot["WBNB"]}
         return
     try:
-        payload = cmc_client._fetch_keyless("get_crypto_quotes_latest", {"symbol": "BNB"})
+        payload = cmc_client.get_crypto_quotes_latest(["BNB"])
         by_symbol = cmc_client._by_symbol(payload)
         bnb = by_symbol.get("BNB")
         if isinstance(bnb, dict):

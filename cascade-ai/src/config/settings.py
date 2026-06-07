@@ -29,7 +29,7 @@ class Settings(BaseModel):
     # objects, and x402 data micropayment keys must stay isolated in src.data.
     cmc_x402_chain_id: int = 8453
     cmc_x402_max_usdc_per_call: float = 0.01
-    use_keyless_primary: bool = True
+    use_keyless_primary: bool = False
     cmc_keyless_base_url: str = "https://pro-api.coinmarketcap.com/trial-pro-api/v3"
     cmc_snapshot_ttl_seconds: int = 7200
     paper_trade: bool = True
@@ -148,7 +148,7 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         ),
         "cmc_x402_chain_id": _get_int("CMC_X402_CHAIN_ID", 8453),
         "cmc_x402_max_usdc_per_call": _get_float("CMC_X402_MAX_USDC_PER_CALL", 0.01),
-        "use_keyless_primary": _get_bool("USE_KEYLESS_PRIMARY", True),
+        "use_keyless_primary": _get_bool("USE_KEYLESS_PRIMARY", False),
         "cmc_keyless_base_url": os.getenv(
             "CMC_KEYLESS_BASE_URL",
             "https://pro-api.coinmarketcap.com/trial-pro-api/v3",
@@ -222,4 +222,7 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
     if mode not in {"breakout", "scalping"}:
         mode = "breakout"
     values["strategy_mode"] = mode
+    # Keyless REST requires CMC_API_KEY. Without it, market data comes from x402 MCP only.
+    if not values.get("cmc_api_key"):
+        values["use_keyless_primary"] = False
     return Settings(**values)
