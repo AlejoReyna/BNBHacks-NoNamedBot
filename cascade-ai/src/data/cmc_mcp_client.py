@@ -306,7 +306,93 @@ class CMCMCPClient:
             normalized_symbols,
             self.get_crypto_market_metrics,
         )
+        return self._build_enriched_snapshot(
+            normalized_symbols,
+            quotes,
+            technicals,
+            market_metrics,
+            derivatives,
+        )
 
+    def fetch_keyless_quotes_snapshot(self, symbols: list[str]) -> dict[str, Any]:
+        """Fetch trial REST quotes only (no x402 payment, no API key required)."""
+
+        normalized_symbols = self._normalize_target_symbols(symbols)
+        if not normalized_symbols:
+            return {}
+
+        quotes = self._fetch_combined_payload(
+            normalized_symbols,
+            self._fetch_keyless_quotes_batch,
+        )
+        if not quotes:
+            LOGGER.warning("Keyless quotes unavailable")
+            return {}
+        return self._snapshot_from_quotes(normalized_symbols, quotes)
+
+    def fetch_x402_enriched_snapshot(self, symbols: list[str]) -> dict[str, Any]:
+        """Fetch paid x402 quotes plus free keyless derivatives and market metrics."""
+
+        normalized_symbols = self._normalize_target_symbols(symbols)
+        if not normalized_symbols:
+            return {}
+
+        quotes = self._fetch_combined_payload(
+            normalized_symbols,
+            self._fetch_x402_quotes_batch,
+        )
+        if not quotes:
+            LOGGER.warning("x402 quotes unavailable; skipping enriched snapshot")
+            return {}
+
+        derivatives = self._fetch_keyless("get_global_crypto_derivatives_metrics", {})
+        market_metrics = self._fetch_combined_payload(
+            normalized_symbols,
+            self._fetch_keyless_market_metrics_batch,
+        )
+        return self._build_enriched_snapshot(
+            normalized_symbols,
+            quotes,
+            {},
+            market_metrics,
+            derivatives,
+        )
+
+    def _fetch_keyless_quotes_batch(self, symbols: list[str]) -> dict[str, Any]:
+        return self._fetch_keyless(
+            "get_crypto_quotes_latest",
+            {
+                "id": self._symbols_to_id_arg(symbols),
+                "symbol": self._symbols_to_symbol_arg(symbols),
+            },
+        )
+
+    def _fetch_keyless_market_metrics_batch(self, symbols: list[str]) -> dict[str, Any]:
+        return self._fetch_keyless(
+            "get_crypto_market_metrics",
+            {
+                "id": self._symbols_to_id_arg(symbols),
+                "symbol": self._symbols_to_symbol_arg(symbols),
+            },
+        )
+
+    def _fetch_x402_quotes_batch(self, symbols: list[str]) -> dict[str, Any]:
+        return self._call_tool_x402(
+            "get_crypto_quotes_latest",
+            {
+                "id": self._symbols_to_id_arg(symbols),
+                "symbol": self._symbols_to_symbol_arg(symbols),
+            },
+        )
+
+    def _build_enriched_snapshot(
+        self,
+        normalized_symbols: list[str],
+        quotes: dict[str, Any],
+        technicals: dict[str, Any],
+        market_metrics: dict[str, Any],
+        derivatives: dict[str, Any],
+    ) -> dict[str, Any]:
         quotes_by_symbol = self._by_symbol(quotes)
         technicals_by_symbol = self._by_symbol(technicals)
         metrics_by_symbol = self._by_symbol(market_metrics)
@@ -364,6 +450,7 @@ class CMCMCPClient:
                     ("open_interest_change_pct", "oi_change_pct", "open_interest_24h_change_pct"),
                 ),
             }
+        LOGGER.info("Built enriched x402 snapshot for %d symbols", len(snapshot))
         return snapshot
 
     def _snapshot_from_quotes(
@@ -444,10 +531,7 @@ class CMCMCPClient:
                 raise RuntimeError("x402 client returned None")
         except Exception as exc:
             LOGGER.warning("CMC MCP x402 call %s failed: %s", tool_name, exc)
-            if self.settings.cmc_api_key:
-                payload = self._fetch_keyless(tool_name, arguments)
-            else:
-                return {}
+            return self._fetch_keyless(tool_name, arguments)
 
         if not isinstance(payload, dict):
             LOGGER.warning("CMC MCP call %s returned non-dict JSON; using empty fallback", tool_name)
@@ -456,6 +540,47 @@ class CMCMCPClient:
         if isinstance(parsed, dict):
             return parsed
         LOGGER.warning("CMC MCP call %s returned an unexpected result shape; using empty fallback", tool_name)
+        return {}
+
+    def _call_tool_x402(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Always route through x402 payment (never keyless-primary shortcut)."""
+
+        envelope = {
+            "jsonrpc": "2.0",
+            "id": str(uuid.uuid4()),
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments,
+            },
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "MCP-Protocol-Version": "2024-11-05",
+        }
+        if self.settings.cmc_api_key:
+            headers["X-CMC-MCP-API-KEY"] = self.settings.cmc_api_key
+
+        try:
+            payload = self.x402_client.request_with_x402(
+                "POST",
+                envelope,
+                headers=headers,
+            )
+            if payload is None:
+                raise RuntimeError("x402 client returned None")
+        except Exception as exc:
+            LOGGER.warning("CMC MCP x402 call %s failed: %s", tool_name, exc)
+            return self._fetch_keyless(tool_name, arguments)
+
+        if not isinstance(payload, dict):
+            LOGGER.warning("CMC MCP x402 call %s returned non-dict JSON; using empty fallback", tool_name)
+            return {}
+        parsed = CmcMcpClient._extract_tool_result(payload)
+        if isinstance(parsed, dict):
+            return parsed
+        LOGGER.warning("CMC MCP x402 call %s returned an unexpected result shape; using empty fallback", tool_name)
         return {}
 
     @staticmethod

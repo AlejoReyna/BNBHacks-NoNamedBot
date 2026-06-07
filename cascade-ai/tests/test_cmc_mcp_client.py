@@ -223,7 +223,7 @@ def test_market_snapshot_skips_remaining_calls_when_quotes_unavailable(monkeypat
 
 
 def test_market_snapshot_exposes_regime_and_three_hour_breakout_fields(monkeypatch: Any) -> None:
-    client = CMCMCPClient(Settings(), x402_client=FakeX402Client())  # type: ignore[arg-type]
+    client = CMCMCPClient(Settings(use_keyless_primary=True), x402_client=FakeX402Client())  # type: ignore[arg-type]
 
     monkeypatch.setattr(
         client,
@@ -263,3 +263,69 @@ def test_market_snapshot_exposes_regime_and_three_hour_breakout_fields(monkeypat
     assert snapshot["CAKE"]["percent_change_24h"] == -2.5
     assert snapshot["CAKE"]["high_3h"] == 2.05
     assert snapshot["CAKE"]["bnb_1h_trend_pct"] == -0.5
+
+
+def test_fetch_keyless_quotes_snapshot_without_api_key(monkeypatch: Any) -> None:
+    calls: list[dict[str, Any]] = []
+
+    def fake_get(*args: Any, **kwargs: Any) -> FakeKeylessResponse:
+        calls.append({"url": args[0], **kwargs})
+        return FakeKeylessResponse()
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    client = CMCMCPClient(Settings(use_keyless_primary=False), x402_client=FakeX402Client())  # type: ignore[arg-type]
+
+    snapshot = client.fetch_keyless_quotes_snapshot(["CAKE"])
+
+    assert snapshot["CAKE"]["price"] == 10.0
+    assert calls[0]["params"]["symbol"] == "CAKE"
+    assert "X-CMC_PRO_API_KEY" not in calls[0]["headers"]
+
+
+def test_fetch_x402_enriched_snapshot_merges_x402_quotes_and_keyless_metrics(monkeypatch: Any) -> None:
+    class PaidX402Client:
+        def request_with_x402(self, method: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+            return {
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                '{"data":{"CAKE":{"symbol":"CAKE","price":2.5,"volume_24h":5000000.0,'
+                                '"market_cap":800000000.0,"percent_change_1h":0.3}}}'
+                            ),
+                        }
+                    ]
+                }
+            }
+
+    def fake_get(*args: Any, **kwargs: Any) -> FakeKeylessResponse:
+        url = str(args[0])
+        if url.endswith("/global-metrics/quotes/latest"):
+            return FakeKeylessResponse({"data": {"funding_rate_avg": 0.0002}})
+        return FakeKeylessResponse(
+            {
+                "data": {
+                    "CAKE": {
+                        "symbol": "CAKE",
+                        "quote": {
+                            "USD": {
+                                "price": 2.5,
+                                "high_3h": 2.55,
+                                "estimated_slippage_pct": 0.0015,
+                            }
+                        },
+                    }
+                }
+            }
+        )
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    client = CMCMCPClient(Settings(use_keyless_primary=False), x402_client=PaidX402Client())  # type: ignore[arg-type]
+
+    snapshot = client.fetch_x402_enriched_snapshot(["CAKE"])
+
+    assert snapshot["CAKE"]["price"] == 2.5
+    assert snapshot["CAKE"]["high_3h"] == 2.55
+    assert snapshot["CAKE"]["estimated_slippage_pct"] == 0.0015
+    assert snapshot["CAKE"]["percent_change_1h"] == 0.3

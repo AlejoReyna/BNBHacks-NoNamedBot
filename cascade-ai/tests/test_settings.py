@@ -91,15 +91,40 @@ def test_load_settings_does_not_expose_cmc_ephemeral_key(monkeypatch: object, tm
     assert not hasattr(settings, "cmc_x402_private_key")
 
 
-def test_load_settings_disables_keyless_without_api_key(monkeypatch: object, tmp_path: Path) -> None:
+def test_load_settings_allows_keyless_primary_without_api_key(monkeypatch: object, tmp_path: Path) -> None:
     env_path = tmp_path / ".env"
     env_path.write_text("USE_KEYLESS_PRIMARY=true\n", encoding="utf-8")
     monkeypatch.delenv("CMC_API_KEY", raising=False)
 
     settings = load_settings(str(env_path))
 
-    assert settings.use_keyless_primary is False
+    assert settings.use_keyless_primary is True
     assert settings.cmc_api_key is None
+
+
+def test_load_settings_auto_enables_dual_with_x402_signer(monkeypatch: object, tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text("CMC_X402_EPHEMERAL_KEY=0xabc\n", encoding="utf-8")
+    monkeypatch.delenv("USE_DUAL_MARKET_DATA", raising=False)
+    monkeypatch.delenv("USE_KEYLESS_PRIMARY", raising=False)
+
+    settings = load_settings(str(env_path))
+
+    assert settings.use_dual_market_data is True
+    assert settings.use_keyless_primary is False
+
+
+def test_load_settings_respects_explicit_dual_disable(monkeypatch: object, tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "CMC_X402_EPHEMERAL_KEY=0xabc\nUSE_DUAL_MARKET_DATA=false\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("USE_DUAL_MARKET_DATA", raising=False)
+
+    settings = load_settings(str(env_path))
+
+    assert settings.use_dual_market_data is False
 
 
 def test_min_entry_factors_is_bounded_to_core_factor_count() -> None:

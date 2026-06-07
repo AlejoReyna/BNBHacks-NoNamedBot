@@ -32,7 +32,7 @@ from src.config.tokens import (
     is_tradable_symbol,
 )
 from src.data.cmc_mcp_client import CMCMCPClient
-from src.data.market_snapshot_cache import get_market_snapshot_cache
+from src.data.market_snapshot_cache import get_dual_market_snapshot_cache, get_market_snapshot_cache
 from src.execution import liquidity_analyzer as liquidity_analyzer_module
 from src.execution.bnb_toolkit_wrapper import BnbToolkitWrapper
 from src.execution.decision_log import DecisionAction, log_decision
@@ -1444,6 +1444,21 @@ if not hasattr(scoring, "evaluate_universe"):
 def _fetch_snapshot(settings: Settings, cmc_client: CMCMCPClient) -> dict[str, dict[str, Any]]:
     if settings.paper_trade:
         return _paper_market_snapshot()
+
+    if settings.use_dual_market_data and not settings.use_keyless_primary:
+        keyless_ttl = settings.cmc_keyless_snapshot_ttl_seconds or settings.loop_seconds
+
+        def _load_dual() -> dict[str, dict[str, Any]]:
+            snapshot = get_dual_market_snapshot_cache().get_merged_snapshot(
+                settings.cmc_snapshot_ttl_seconds,
+                keyless_ttl,
+                lambda: cmc_client.fetch_x402_enriched_snapshot(TARGET_SYMBOLS),
+                lambda: cmc_client.fetch_keyless_quotes_snapshot(TARGET_SYMBOLS),
+            )
+            _ensure_bnb_reference(snapshot, cmc_client)
+            return snapshot
+
+        return _load_dual()
 
     def _load() -> dict[str, dict[str, Any]]:
         snapshot = cmc_client.fetch_market_snapshot(TARGET_SYMBOLS)

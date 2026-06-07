@@ -30,8 +30,10 @@ class Settings(BaseModel):
     cmc_x402_chain_id: int = 8453
     cmc_x402_max_usdc_per_call: float = 0.01
     use_keyless_primary: bool = False
+    use_dual_market_data: bool = False
     cmc_keyless_base_url: str = "https://pro-api.coinmarketcap.com/trial-pro-api/v3"
     cmc_snapshot_ttl_seconds: int = 7200
+    cmc_keyless_snapshot_ttl_seconds: int = 300
     paper_trade: bool = True
     loop_seconds: int = 300
     price_cache_maxlen: int = 2880
@@ -125,6 +127,17 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
     """Load settings from .env and the current process environment."""
 
     load_dotenv(dotenv_path=dotenv_path)
+    loop_seconds = _get_int("LOOP_SECONDS", 300)
+    use_keyless_primary = _get_bool("USE_KEYLESS_PRIMARY", False)
+    has_x402_signer = bool(
+        os.getenv("CMC_X402_EPHEMERAL_KEY", "").strip()
+        or os.getenv("EVM_PRIVATE_KEY", "").strip()
+    )
+    use_dual_env = os.getenv("USE_DUAL_MARKET_DATA")
+    if use_dual_env is not None:
+        use_dual_market_data = _get_bool("USE_DUAL_MARKET_DATA", False)
+    else:
+        use_dual_market_data = has_x402_signer and not use_keyless_primary
     values: dict[str, Any] = {
         "cmc_api_key": _none_if_blank(os.getenv("CMC_API_KEY")),
         "bsc_rpc_url": _none_if_blank(os.getenv("BSC_RPC_URL") or os.getenv("BSC_PROVIDER_URL")),
@@ -148,14 +161,19 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         ),
         "cmc_x402_chain_id": _get_int("CMC_X402_CHAIN_ID", 8453),
         "cmc_x402_max_usdc_per_call": _get_float("CMC_X402_MAX_USDC_PER_CALL", 0.01),
-        "use_keyless_primary": _get_bool("USE_KEYLESS_PRIMARY", False),
+        "use_keyless_primary": use_keyless_primary,
+        "use_dual_market_data": use_dual_market_data,
         "cmc_keyless_base_url": os.getenv(
             "CMC_KEYLESS_BASE_URL",
             "https://pro-api.coinmarketcap.com/trial-pro-api/v3",
         ),
         "cmc_snapshot_ttl_seconds": _get_int("CMC_SNAPSHOT_TTL_SECONDS", 7200),
+        "cmc_keyless_snapshot_ttl_seconds": _get_int(
+            "CMC_KEYLESS_SNAPSHOT_TTL_SECONDS",
+            loop_seconds,
+        ),
         "paper_trade": _get_bool("PAPER_TRADE", True),
-        "loop_seconds": _get_int("LOOP_SECONDS", 300),
+        "loop_seconds": loop_seconds,
         "price_cache_maxlen": _get_int("PRICE_CACHE_MAXLEN", 2880),
         "max_position_pct": _get_float("MAX_POSITION_PCT", 0.05),
         "max_daily_trades": _get_int("MAX_DAILY_TRADES", 3),
@@ -222,7 +240,4 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
     if mode not in {"breakout", "scalping"}:
         mode = "breakout"
     values["strategy_mode"] = mode
-    # Keyless REST requires CMC_API_KEY. Without it, market data comes from x402 MCP only.
-    if not values.get("cmc_api_key"):
-        values["use_keyless_primary"] = False
     return Settings(**values)
