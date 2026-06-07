@@ -14,7 +14,22 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from src.config.tokens import get_cmc_id  # noqa: E402
 from src.data.x402_client import CMC_X402_ENDPOINT, DEFAULT_PAYMENT_ASSET, X402Client  # noqa: E402
+
+
+def _mcp_tool_error_message(payload: dict) -> str | None:
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return "missing MCP result"
+    if not result.get("isError"):
+        return None
+    content = result.get("content")
+    if isinstance(content, list) and content:
+        first = content[0]
+        if isinstance(first, dict) and first.get("text"):
+            return str(first["text"])
+    return "MCP tool returned isError=true"
 
 
 def _payment_key_configured() -> bool:
@@ -47,13 +62,17 @@ def run() -> int:
         default_asset=os.getenv("CMC_X402_ASSET", DEFAULT_PAYMENT_ASSET),
         chain_id=int(os.getenv("CMC_X402_CHAIN_ID", "8453")),
     )
+    symbol = os.getenv("CMC_X402_SMOKE_SYMBOL", "BNB").strip().upper()
     envelope = {
         "jsonrpc": "2.0",
         "id": str(uuid.uuid4()),
         "method": "tools/call",
         "params": {
             "name": "get_crypto_quotes_latest",
-            "arguments": {"symbol": "BNB", "convert": "USD"},
+            "arguments": {
+                "id": get_cmc_id(symbol),
+                "symbol": symbol,
+            },
         },
     }
     headers = {"MCP-Protocol-Version": "2024-11-05"}
@@ -63,6 +82,15 @@ def run() -> int:
     result = client.request_with_x402("POST", envelope, headers=headers)
     if result is None:
         print("x402_paid_quote_failed=true", file=sys.stderr)
+        return 1
+
+    tool_error = _mcp_tool_error_message(result)
+    if tool_error:
+        print(f"x402_paid_quote_failed=true reason={tool_error}", file=sys.stderr)
+        output_path = ROOT / "artifacts" / "x402_sdk_paid_quote_error.json"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(result, indent=2, sort_keys=True, default=str), encoding="utf-8")
+        print(f"x402_paid_quote_error={output_path}", file=sys.stderr)
         return 1
 
     output_path = ROOT / "artifacts" / "x402_sdk_paid_quote_success.json"

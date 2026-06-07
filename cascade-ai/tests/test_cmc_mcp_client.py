@@ -70,6 +70,20 @@ def test_cmc_mcp_uses_documented_api_key_header() -> None:
     assert result == {"ok": True}
     assert fake_x402.calls[0]["headers"]["X-CMC-MCP-API-KEY"] == "secret"
     assert "X-CMC_PRO_API_KEY" not in fake_x402.calls[0]["headers"]
+    arguments = fake_x402.calls[0]["payload"]["params"]["arguments"]
+    assert arguments["id"] == "7186"
+    assert arguments["symbol"] == "CAKE"
+
+
+def test_cmc_mcp_quotes_include_bnb_cmc_id() -> None:
+    fake_x402 = FakeX402Client()
+    client = CMCMCPClient(Settings(use_keyless_primary=False), x402_client=fake_x402)  # type: ignore[arg-type]
+
+    client.get_crypto_quotes_latest(["BNB"])
+
+    arguments = fake_x402.calls[0]["payload"]["params"]["arguments"]
+    assert arguments["id"] == "1839"
+    assert arguments["symbol"] == "BNB"
 
 
 def test_market_metrics_uses_documented_tool_name() -> None:
