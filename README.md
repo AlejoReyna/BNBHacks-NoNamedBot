@@ -1,123 +1,210 @@
-# Plan B+ — BSC Momentum Breakout Scalper
+<div align="center">
 
-Plan B+ is a runnable Python skeleton for the BNB Hack: AI Trading Agent Edition, Track 1. It is an autonomous, rule-based BSC momentum breakout scalper for high-volume BNB Chain tokens with strict guardrails, local TWAK signing, and x402 access to CoinMarketCap premium data.
+# NoNamedYet_Bot
 
-It intentionally does not include ML, external inference servers, invented trading APIs, cloud workers, VPS setup, or fake PancakeSwap SDKs.
+**Autonomous BSC trading agent for the BNB Hack — AI Trading Agent Edition**
 
-Read `context.md` first if you are onboarding. It is the detailed technical
-handoff with current proof, known gaps, and next engineering tasks.
+*Rule-based momentum & scalping · TWAK self-custody execution · CMC market data · strict guardrails*
 
-## Current Verified State
+<br/>
 
-As of 2026-06-04:
+| | |
+|:---:|:---:|
+| **Chain** | BNB Smart Chain (BSC) |
+| **Agent schema** | `2.6.0` |
+| **Default strategy** | `scalping` |
+| **Loop interval** | `300s` (5 min) |
+| **Tests** | `273+` pytest cases |
 
-- TWAK CLI version verified locally: `0.17.0`.
-- BSC agent wallet verified by TWAK:
-  `0x7CE28f5d2D1B2eFd8f87FF0a7fdC7D2EaB465c9c`.
-- `.env` points both `AGENT_WALLET_ADDRESS` and `WALLET_ADDRESS` at that same
-  wallet.
-- `python -m src.main --live --balance` reads real BSC balances through Web3.
-- A real BSC approval and swap have been executed through TWAK/LiquidMesh.
-- TWAK swap parsing handles pure JSON and mixed stdout with approval/swap tx
-  lines before the final JSON.
-- Autonomous entry, exit, and emergency liquidation paths persist execution
-  records to `execution_log.jsonl`.
-- Autonomous strategy decisions persist to `decision_log.jsonl`, including
-  WAIT, BLOCKED, ENTER, and HALT cycle decisions.
-- CMC Keyless trial API is the primary market-data path by default
-  (`USE_KEYLESS_PRIMARY=true`).
-- CMC Agent Hub MCP/x402 is also available as an isolated optional adapter in
-  `src/data/cmc_mcp_client.py`, `src/data/x402_client.py`, and
-  `src/data/market_data_router.py`. It delegates paid requests to
-  `twak x402 request`, so the user's TWAK wallet signs locally. Trading
-  execution also uses TWAK self-custody signing exclusively.
-- Current tests: `117 passed, 1 warning`.
+<br/>
 
-Real execution proof:
+[Quick Start](#-quick-start) · [Run Modes](#-run-modes) · [Strategy](#-strategy-modes) · [Architecture](#-architecture) · [Logs](#-logs--telemetry)
 
-```text
-demo_artifacts/real_twak_swap_2026-06-04.md
+</div>
+
+---
+
+## Overview
+
+**NoNamedYet_Bot** is a production-minded Python trading agent that evaluates a focused universe of high-liquidity BNB Chain tokens, applies regime-aware guardrails, and executes swaps through **TWAK** — so Python never holds a trading private key.
+
+| Design principle | What it means |
+| --- | --- |
+| **No ML pipeline** | Deterministic, auditable factor scoring — no black-box inference |
+| **No custom execution server** | All writes go through verified TWAK CLI subprocesses |
+| **Fail-closed risk** | Slippage, drawdown, and daily limits block entries before capital moves |
+| **Append-only audit trail** | Every cycle and swap is logged to JSONL for replay and demo proof |
+
+> **Onboarding tip:** `context.md` is the engineer handoff — verified proofs, env quirks, and open blockers live there.
+
+---
+
+## What it does today
+
+Each trading cycle (every `LOOP_SECONDS`, default **5 minutes**):
+
+```
+┌─────────────┐    ┌──────────────┐    ┌─────────────┐    ┌──────────────┐
+│ Fetch CMC   │───▶│ Detect regime│───▶│ Score tokens│───▶│ Guardrails   │
+│ snapshot    │    │ + sentiment  │    │ (strategy)  │    │ check        │
+└─────────────┘    └──────────────┘    └─────────────┘    └──────┬───────┘
+                                                                  │
+                    ┌──────────────┐    ┌──────────────┐            ▼
+                    │ Reconcile tx │◀───│ TWAK swap    │◀─── ENTER or WAIT
+                    │ on-chain     │    │ (live only)  │
+                    └──────────────┘    └──────────────┘
 ```
 
-Approval tx:
+1. **Market data** — CoinMarketCap trial REST quotes (and optional x402-paid enrichment when a micropayment signer is configured).
+2. **Regime & sentiment** — BNB trend, Fear & Greed, funding, and gas inform risk posture.
+3. **Strategy evaluation** — `breakout` (4-of-4 core factors) or `scalping` (weighted 0–100 score).
+4. **Position management** — Monitor open trades every `POSITION_MONITOR_SECONDS`; exit on TP, SL, trailing stop, or time stop.
+5. **Live execution** — TWAK quote-only slippage checks → swap → on-chain reconciliation before persisting local state.
+6. **Telemetry** — Structured logs under `logs/` plus legacy `decision_log.jsonl` / `execution_log.jsonl`.
 
-```text
-0x5863c33ba5fbfd7016fae9dfe062d853213b198376862fd76ce81336a20fe7d0
-```
+---
 
-Swap tx:
+## Verified state
 
-```text
-0x2b5db498c97d6c69af6718872feb749457e7e6434c17569a34a2f78ff64eda94
-```
+> Last audited: **2026-06-08**
+
+| Capability | Status |
+| --- | --- |
+| TWAK CLI `0.17.0` swap + approval on BSC | ✅ Proven ([artifact](demo_artifacts/real_twak_swap_2026-06-04.md)) |
+| Live balance reads via `bnb-chain-agentkit` | ✅ |
+| Autonomous decision + execution JSONL logging | ✅ |
+| On-chain execution reconciliation | ✅ |
+| Dual CMC data path (REST + x402 enrichment) | ✅ Implemented |
+| Autonomous loop producing a funded live swap | ⏳ Manual TWAK swap proven; loop micro-live pending |
+| End-to-end paid CMC x402 in production | ⏳ Dual mode ready; full live proof pending |
+
+**On-chain proof (manual TWAK run):**
+
+| Action | Tx hash |
+| --- | --- |
+| Approval | `0x5863c33ba5fbfd7016fae9dfe062d853213b198376862fd76ce81336a20fe7d0` |
+| Swap | `0x2b5db498c97d6c69af6718872feb749457e7e6434c17569a34a2f78ff64eda94` |
+
+---
 
 ## Architecture
 
-- `src/data`: CoinMarketCap Keyless market data, MCP JSON-RPC envelopes, and
-  x402 payment retry handling.
-- `src/execution`: TWAK subprocess commands, bnb-chain-agentkit balance/transfer wrapper, PancakeSwap V3 conceptual routing, and append-only audit logs.
-- `src/strategy`: four-core-factor breakout gating, two optional score factors, JSON-backed position tracking, and executable guardrails.
-- `src/config`: settings, token allowlists, and environment-only secret access.
-- `src/main.py`: CLI entrypoint and 5-minute trading loop.
+```mermaid
+flowchart TB
+    subgraph Data["src/data"]
+        CMC[CMCMCPClient]
+        X402[x402_client]
+        Cache[market_snapshot_cache]
+        Router[market_data_router]
+    end
 
-## Verified Tools
+    subgraph Strategy["src/strategy"]
+        Factory[factory]
+        Breakout[6falgorithm / breakout]
+        Scalp[scalping_engine]
+        Regime[regime_detector]
+        Guard[guardrails / scalping_guardrails]
+        Pos[positions / scalping_positions]
+    end
 
-CMC MCP tool names used exactly:
+    subgraph Execution["src/execution"]
+        TWAK[twak_interface]
+        Swap[swap_router]
+        Recon[execution_reconciler]
+        Logs[decision_log + execution_log]
+    end
 
-- `get_crypto_quotes_latest`
-- `get_crypto_technical_analysis`
-- `get_global_crypto_derivatives_metrics`
-- `get_crypto_market_metrics`
-
-Official x402 endpoint:
-
-```text
-https://mcp.coinmarketcap.com/x402/mcp
+    Main[src/main.py] --> Data
+    Main --> Strategy
+    Main --> Execution
+    Factory --> Breakout
+    Factory --> Scalp
+    CMC --> Cache
+    X402 --> CMC
+    TWAK --> Swap
+    Swap --> Recon
+    Main --> Logs
 ```
 
-Verified execution imports:
+| Module | Responsibility |
+| --- | --- |
+| `src/main.py` | CLI, 5-minute agent loop, preflight, emergency liquidation |
+| `src/data/` | CMC Keyless quotes, x402 micropayments, snapshot caching |
+| `src/strategy/` | Breakout & scalping engines, regime, sentiment, guardrails |
+| `src/execution/` | TWAK subprocess wrapper, swap routing, on-chain reconciliation |
+| `src/config/` | Settings, token allowlists, env-only secrets |
+| `scripts/` | Smoke tests, shadow replay, emergency shell helpers |
 
-```python
-from bnb_chain_agentkit.agent_toolkits import BnbChainToolkit
-from bnb_chain_agentkit.utils import BnbChainAPIWrapper
-```
+---
 
-Verified TWAK commands:
+## Strategy modes
 
-```bash
-twak wallet create
-twak compete register
-twak wallet sign-message --chain base --message <text> --json
-twak x402 request <endpoint> --method POST --body <json> --max-payment <atomic> --prefer-network base --prefer-method eip3009 --yes --json
-twak swap <amount> <from-token> <to-token> --slippage <pct> --chain bsc --json
-twak start
-```
+Set `STRATEGY_MODE` in `.env` — default is **`scalping`**.
 
-Use `twak x402 request` for native x402. TWAK owns the paid HTTP request and
-signs the EIP-3009 authorization locally from the user's TWAK wallet. Because
-TWAK 0.17.0 does not expose custom request-header flags for x402, the agent
-keeps CMC Keyless as a fail-open market-data fallback if CMC rejects the generic
-TWAK request shape.
+### Scalping *(default)*
 
-TWAK 0.17.0 does not accept the old `twak swap --from ... --to ... --amount ...`
-form. `twak swap --help` shows positional arguments:
+Weighted score **0–100** across five factors. Entry requires `SCALPING_ENTRY_SCORE_MIN` (default **60**).
 
-```bash
-twak swap [options] <amountOrFrom> <fromOrTo> [to]
-```
+| Factor | Weight | Intent |
+| ---: | ---: | --- |
+| Micro momentum | 30 | Short-horizon price/volume impulse |
+| Slippage OK | 25 | TWAK quote-only under cap |
+| Regime neutral | 20 | Not fighting a risk-off tape |
+| No whale dump | 15 | Avoid sharp sell pressure |
+| Gas viable | 10 | BSC gas within scalping budget |
 
-For BSC swaps use:
+| Parameter | Default |
+| --- | --- |
+| Position size | 1% of portfolio |
+| Take profit | +1.5% |
+| Stop loss | −0.8% |
+| Max hold | 30 min (time stop at 20 min) |
+| Max slippage | 0.5% |
+| Open positions | **1 at a time** |
+| Daily trades | up to 10 |
+| Daily loss cap | 2% |
 
-```bash
-twak swap 0.5 USDC BNB --slippage 1 --chain bsc --quote-only --json
-twak swap 0.5 USDC BNB --slippage 1 --chain bsc --json
-```
+### Breakout *(legacy)*
 
-`--slippage` is a percent value at the TWAK CLI. The codebase stores slippage as
-a fraction (`0.01` = 1%) and `TWAKInterface._fraction_to_cli_percent()` converts
-it to TWAK CLI percent format (`--slippage 1`).
+Four **mandatory** core factors (default `MIN_ENTRY_FACTORS=4`). Slippage always fail-closed.
 
-## Setup
+| # | Core factor |
+| ---: | --- |
+| 1 | 1h volume > 2× rolling 24h hourly average |
+| 2 | Price breaks 3h high (+ 0.2% buffer) |
+| 3 | BNB 1h trend not sharply risk-off |
+| 4 | TWAK quote-only slippage < 1% |
+
+Optional ranking factors: RSI band (55–75) and derivatives risk clearance.
+
+| Parameter | Default |
+| --- | --- |
+| Position size | up to 5% of portfolio |
+| Trailing stop | 3.5% below peak |
+| Take profit | +8% |
+| Max daily trades | 3 |
+| Max daily loss | 3% → 24h pause |
+
+---
+
+## Risk guardrails
+
+> Guardrails are **never** bypassed for demo or competition windows.
+
+| Control | Breakout | Scalping |
+| --- | --- | --- |
+| Tradable allowlist | `TRADABLE_TARGET_SYMBOLS` only | same |
+| Drawdown soft stop | 10% | inherited |
+| Drawdown kill switch | 15% → liquidate & halt | inherited |
+| Max swap slippage | 1% | 0.5% |
+| Consecutive loss cooldown | — | 3 stops → 1h pause |
+| Emergency liquidation | `python -m src.main --emergency-liquidate` | same |
+
+Stables (USDC / USDT) are settlement tokens — not directional entry targets.
+
+---
+
+## Quick start
 
 ```bash
 python -m venv .venv
@@ -126,193 +213,193 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Configure `.env` with real CMC access, RPC URLs, wallet address, token addresses, and TWAK setup before live trading.
-The current `bnb-chain-agentkit` package requires Python 3.12+ and
-`BSC_PROVIDER_URL`/`BSC_RPC_URL` for live balance and transfer operations.
+Edit `.env` with RPC URLs, wallet address, and TWAK unlock before live trading.
 
-Required live environment variables:
+**Required for live mode:**
 
-```text
+```env
 BSC_PROVIDER_URL=...
-OPBNB_PROVIDER_URL=...
 AGENT_WALLET_ADDRESS=...
 WALLET_ADDRESS=...
 PAPER_TRADE=false
 ```
 
-Optional/credential variables:
-
-```text
-CMC_API_KEY=...
-USE_KEYLESS_PRIMARY=true
-CMC_MCP_ENABLED=false
-CMC_MCP_SHADOW_MODE=true
-CMC_MCP_URL=https://mcp.coinmarketcap.com/x402/mcp
-CMC_X402_AMOUNT=0.01
-CMC_X402_ASSET=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
-TWAK_WALLET_PASSWORD=...
-ACCESS_ID=...
-ACCESS_SECRET=...
-```
-
-Do not commit `.env`. It is ignored by `.gitignore`.
-
-## Optional CMC MCP/x402 Adapter
-
-The CMC Agent Hub MCP/x402 path is a client-side adapter for
-`https://mcp.coinmarketcap.com/x402/mcp`. It posts MCP `initialize`,
-`tools/list`, and `tools/call` requests over Streamable HTTP, saves unknown 402
-responses to `artifacts/x402_402_response.json`, and routes paid request
-attempts through TWAK-native x402.
-
-x402 payments use `twak x402 request` for CMC data access. TWAK local signing
-controls x402 authorizations, trading execution, swaps, approvals, transfers,
-and liquidation. No x402 private key is needed in `.env` for the submitted
-path.
-
-Default trading behavior does not depend on it:
-
-```text
-CMC_MCP_ENABLED=false
-CMC_MCP_SHADOW_MODE=true
-USE_KEYLESS_PRIMARY=true
-```
-
-Run local checks:
+**TWAK wallet unlock** (pick one):
 
 ```bash
-pip install -r requirements.txt
-pytest
-python scripts/smoke_cmc_mcp.py
-python scripts/smoke_cmc_x402_paid_quote.py
+# Preferred — OS keychain
+twak wallet keychain save --password '<wallet-password>'
+twak wallet keychain check
+
+# Or local-only (never commit)
+TWAK_WALLET_PASSWORD=...
 ```
 
-TODO: confirm the exact live CMC MCP behavior through `twak x402 request`.
-Current code keeps Keyless fallback because TWAK owns x402 HTTP headers.
+```bash
+pytest
+```
 
-## TWAK Setup
+---
+
+## Run modes
+
+| Command | Description |
+| --- | --- |
+| `python -m src.main --paper-trade` | Deterministic paper execution *(default when neither flag is set)* |
+| `python -m src.main --live` | Live TWAK swaps on BSC |
+| `python -m src.main --live --preflight` | Readiness checks — no broadcasts |
+| `python -m src.main --live --once` | Single cycle then exit |
+| `python -m src.main --live --demo-mode` | Compact per-cycle stdout summary |
+| `python -m src.main --live --balance` | Print wallet balances and exit |
+| `python -m src.main --emergency-liquidate` | Sell open positions → USDC |
+| `python -m src.main --live --withdraw SYMBOL --to 0x… --amount N` | Transfer tokens out |
+
+**Examples:**
+
+```bash
+# Paper loop (safe default)
+python -m src.main --paper-trade
+
+# Live with preflight first
+python -m src.main --live --preflight
+python -m src.main --live
+
+# Dry-run emergency exit
+python -m src.main --emergency-liquidate --paper-trade
+```
+
+---
+
+## Market data
+
+Three paths — configured via `.env`:
+
+| Mode | Env | Behavior |
+| --- | --- | --- |
+| **Dual** *(default live)* | `USE_DUAL_MARKET_DATA=true` | Trial REST every loop; x402 enrichment on `CMC_SNAPSHOT_TTL_SECONDS` cadence |
+| **Keyless only** | `USE_KEYLESS_PRIMARY=true` | Trial REST snapshots only |
+| **MCP shadow** | `CMC_MCP_ENABLED=true` + `CMC_MCP_SHADOW_MODE=true` | Exercise x402 MCP without affecting trading data |
+
+x402 micropayments use `CMC_X402_EPHEMERAL_KEY` (isolated in `src/data/` — **not** the TWAK trading wallet).
+
+**Verified TWAK commands:**
 
 ```bash
 twak wallet create
 twak compete register
-```
-
-For unattended execution, TWAK must be able to unlock the agent wallet without
-an interactive prompt. Prefer storing the password in the OS keychain:
-
-```bash
-twak wallet keychain save --password '<wallet-password>'
-twak wallet keychain check
-```
-
-For a hackathon runner, `TWAK_WALLET_PASSWORD` can also be set in the local
-`.env` file. Keep `.env` ignored and never commit it. The project uses internal
-fractional slippage values (`0.01` = 1%) and converts them to TWAK's percent CLI
-format (`--slippage 1`).
-
-Manual shell commands do not automatically load `.env`. Either export
-`TWAK_WALLET_PASSWORD` in the shell or use the keychain. Python commands call
-`load_dotenv()`, so TWAK subprocesses spawned by Python inherit `.env` values.
-
-Password/unlock smoke test:
-
-```bash
 twak wallet address --chain bsc --json
+twak swap <amount> <from> <to> --slippage <pct> --chain bsc --quote-only --json
+twak swap <amount> <from> <to> --slippage <pct> --chain bsc --json
+twak x402 pay --url <endpoint> --amount <amount> --asset <token> --chain base --json
 ```
 
-The result must match `AGENT_WALLET_ADDRESS`.
+> Internal slippage is stored as a fraction (`0.01` = 1%). TWAK CLI expects percent (`--slippage 1`).
 
-## Run
-
-Paper mode:
+**Smoke scripts:**
 
 ```bash
-python -m src.main --paper-trade
+python scripts/smoke_cmc_mcp.py
+python scripts/smoke_cmc_x402_paid_quote.py
+python scripts/replay_shadow.py
 ```
 
-Live mode:
+---
 
-```bash
-python -m src.main --live
+## Logs & telemetry
+
+### Structured (`logs/`)
+
+| File | Contents |
+| --- | --- |
+| `decision_live.jsonl` | Per-cycle ENTER / WAIT / BLOCKED / HALT with factor scores |
+| `portfolio_snapshots.jsonl` | Portfolio value, drawdown, open positions |
+| `risk_events.jsonl` | Kill switch, pause, and limit breaches |
+| `sentiment_live.jsonl` | FGI, funding, gas snapshots |
+| `decision_shadow.jsonl` | Parallel strategy variants for research |
+
+### Legacy (root)
+
+| File | Contents |
+| --- | --- |
+| `decision_log.jsonl` | Compact strategy decisions |
+| `execution_log.jsonl` | Swap attempts, tx hashes, errors |
+
+Override paths with `DECISION_LOG_PATH`, `EXECUTION_LOG_PATH`, `POSITION_STATE_PATH`, and `GUARDRAIL_STATE_PATH`.
+
+---
+
+## Key environment variables
+
+<details>
+<summary><strong>Click to expand full env reference</strong></summary>
+
+```env
+# Strategy
+STRATEGY_MODE=scalping          # or "breakout"
+LOOP_SECONDS=300
+POSITION_MONITOR_SECONDS=60
+
+# Market data
+USE_DUAL_MARKET_DATA=true
+CMC_SNAPSHOT_TTL_SECONDS=7200
+CMC_KEYLESS_SNAPSHOT_TTL_SECONDS=300
+USE_KEYLESS_PRIMARY=false
+CMC_MCP_ENABLED=false
+CMC_MCP_SHADOW_MODE=false
+
+# x402 (Base micropayments for CMC enrichment)
+CMC_X402_EPHEMERAL_KEY=
+CMC_X402_AMOUNT=0.01
+CMC_X402_ASSET=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+CMC_X402_CHAIN_ID=8453
+
+# Risk (breakout defaults shown; scalping has separate caps in settings.py)
+MAX_POSITION_PCT=0.05
+MAX_DAILY_TRADES=3
+MAX_DAILY_LOSS_PCT=0.03
+DRAWDOWN_KILL_SWITCH_PCT=0.15
+MIN_ENTRY_FACTORS=4
 ```
 
-Emergency liquidation:
+See `src/config/settings.py` and `.env.example` for the complete list.
 
-```bash
-python -m src.main --emergency-liquidate
+</details>
+
+---
+
+## Known gaps
+
+- [ ] Autonomous loop has not yet persisted a **funded micro-live** swap end-to-end (manual TWAK swap is proven).
+- [ ] Paid CMC x402 enrichment is wired but awaits full production proof.
+- [ ] MEV/sandwich cost on PancakeSwap is acknowledged in scalping docs but not modeled in backtests.
+- [ ] Unattended production should harden state recovery beyond JSON file persistence.
+
+---
+
+## Project layout
+
+```
+NoNamedYet_Bot/
+├── src/
+│   ├── main.py              # Agent loop & CLI
+│   ├── config/              # Settings, tokens, secrets
+│   ├── data/                # CMC + x402 clients
+│   ├── execution/           # TWAK, swaps, reconciliation
+│   └── strategy/            # Breakout, scalping, regime, guardrails
+├── tests/                   # Pytest suite
+├── scripts/                 # Smoke & ops helpers
+├── logs/                    # Structured telemetry (gitignored contents)
+├── demo_artifacts/          # On-chain proof writeups
+├── .env.example
+└── context.md               # Technical handoff for AI/engineering sessions
 ```
 
-Emergency liquidation defaults to live execution and loads `POSITION_STATE_PATH`
-before selling open positions back to USDC. Use `--paper-trade` with the
-emergency command only for a dry run.
+---
 
-Tests:
+<div align="center">
 
-```bash
-pytest
-```
+**Built for BNB Hack Track 1** · TWAK self-custody · CoinMarketCap data · No private keys in Python
 
-If your shell does not have the virtualenv activated, use:
+*Previously developed as Plan B+ — now **NoNamedYet_Bot***
 
-```bash
-./.venv/bin/python -m pytest -q
-```
-
-## Logs
-
-The agent writes two append-only JSONL audit files by default:
-
-- `decision_log.jsonl` records one strategy decision per cycle: ENTER, WAIT,
-  BLOCKED, or HALT, with the selected symbol, factor scores, slippage estimate,
-  portfolio value, position count, and reason.
-- `execution_log.jsonl` records swap execution attempts and results: entries,
-  exits, emergency liquidations, tx hashes, approvals, router output, and errors.
-
-Use `DECISION_LOG_PATH` and `EXECUTION_LOG_PATH` to move these files without
-changing code.
-
-## Strategy
-
-The agent evaluates the focused 20-token target universe every 5 minutes. USDT and USDC remain configured for routing and balance checks, but are excluded from directional entries. The engine scores six factors, but entries are gated by the four core factors below. The default `MIN_ENTRY_FACTORS=4` requires all four core factors to pass, and slippage is always mandatory and fail-closed.
-
-Core entry factors:
-
-- 1h volume is greater than 2x rolling 24h hourly average when CMC hourly fields are available, with local 24h cache fallback.
-- Price breaks the CMC 6h high when available, with local six-hour price cache fallback.
-- BNB 1h trend is not sharply risk-off.
-- Estimated slippage is non-negative and under 1% through TWAK quote-only.
-
-Optional score/ranking factors:
-
-- RSI is between 55 and 75, inclusive.
-- Funding and open interest are not flashing broad liquidation risk.
-
-`MIN_ENTRY_FACTORS=3` can be used to permit one missing core factor, but slippage still must pass and all executable guardrails remain enforced.
-
-After entry, the position manager persists the open position, sets a trailing stop 3.5% below entry, and sets a fixed take-profit at +8%. In live mode, the agent requires a swap tx hash before opening or closing local position state; paper mode uses the fake paper tx hash.
-
-## Risk Guardrails
-
-- Strict trading allowlist: only `TRADABLE_TARGET_SYMBOLS` for directional entries; stables are base/settlement tokens only.
-- Max position size: 5% of portfolio per trade.
-- Max daily trades: 3.
-- Max daily realized loss: 3% of portfolio, then pause entries for 24 hours.
-- Max swap slippage: 1%.
-- Drawdown kill switch: 20% from all-time high triggers liquidation to USDC and terminates the loop.
-- Manual emergency command loads persisted positions or reconstructs target-token wallet balances, then sells non-USDC positions to USDC without undocumented TWAK commands.
-
-The June 22-28 live-window trade target is implemented only as a log warning. Guardrails are never overridden to force a trade.
-
-## Live Trading Notes
-
-Real trading requires funded wallets, correct BSC and opBNB RPC configuration, token addresses, TWAK setup, CMC/x402 access, and installed dependencies. This skeleton persists positions to `positions.json`, guardrails to `guardrail_state.json`, strategy decisions to `decision_log.jsonl`, and execution logs to `execution_log.jsonl` by default; production deployments should still harden state recovery and reconciliation before running unattended capital.
-
-## Known Gaps
-
-- Real TWAK signing/broadcast has been proven manually, but the autonomous
-  strategy loop has not yet produced and persisted a real trade.
-- Real CMC/x402 paid data has not yet been proven end-to-end against the live
-  paid endpoint. Current live-safe data path is CMC Keyless trial; x402 remains
-  implemented for native-payment demo and TWAK-special-prize proof.
-- Router output-floor validation happens after TWAK returns. Real pre-broadcast
-  slippage protection depends on TWAK/LiquidMesh honoring `--slippage`.
+</div>
