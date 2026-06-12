@@ -472,6 +472,7 @@ def run_agent(settings: Settings, max_cycles: int | None = None) -> None:
     running = True
     cycles_completed = 0
     previous_risk_state: RiskState | None = None
+    breakout_near_miss_cooldowns: dict[str, int] = {}
 
     def _stop(_signum: int, _frame: Any) -> None:
         nonlocal running
@@ -482,6 +483,16 @@ def run_agent(settings: Settings, max_cycles: int | None = None) -> None:
 
     while running:
         cycle_number = cycles_completed + 1
+        breakout_near_miss_cooldowns = {
+            symbol: until_cycle
+            for symbol, until_cycle in breakout_near_miss_cooldowns.items()
+            if until_cycle >= cycle_number
+        }
+        recent_near_miss_excludes = {
+            symbol
+            for symbol, until_cycle in breakout_near_miss_cooldowns.items()
+            if until_cycle >= cycle_number
+        }
         now_utc = datetime.now(timezone.utc)
         open_positions = position_manager.list_open_positions()
         market_snapshot = _fetch_snapshot(
@@ -636,6 +647,8 @@ def run_agent(settings: Settings, max_cycles: int | None = None) -> None:
                         LOGGER.warning("ML OHLCV refresh failed: %s", exc)
                 exclude_symbols = {position.symbol for position in position_manager.list_open_positions()}
                 exclude_symbols.update(pending_swap_cooldowns)
+                if settings.strategy_mode == "breakout":
+                    exclude_symbols.update(recent_near_miss_excludes)
                 candidate = _evaluate_universe_v25(
                     market_snapshot,
                     portfolio_value,
@@ -734,6 +747,10 @@ def run_agent(settings: Settings, max_cycles: int | None = None) -> None:
             risk_state_changed,
         )
         open_symbols = {position.symbol for position in position_manager.list_open_positions()}
+        telemetry_exclude_symbols = set(open_symbols)
+        telemetry_exclude_symbols.update(pending_swap_cooldowns)
+        if settings.strategy_mode == "breakout":
+            telemetry_exclude_symbols.update(recent_near_miss_excludes)
         telemetry_candidate = _telemetry_candidate_for_log(
             settings,
             strategy_bundle,
@@ -742,7 +759,7 @@ def run_agent(settings: Settings, max_cycles: int | None = None) -> None:
             regime_result,
             risk_decision,
             twak_interface,
-            open_symbols,
+            telemetry_exclude_symbols,
             sentiment_result,
             candidate,
         )
@@ -762,6 +779,13 @@ def run_agent(settings: Settings, max_cycles: int | None = None) -> None:
             liquidity=liquidity,
             position_count=len(position_manager.list_open_positions()),
             entries_blocked_reason=entries_blocked_reason,
+        )
+        _update_breakout_near_miss_cooldowns(
+            settings,
+            cycle_number,
+            action,
+            telemetry_candidate,
+            breakout_near_miss_cooldowns,
         )
         if shadow_logger is not None:
             try:
@@ -944,6 +968,45 @@ def _entries_blocked_reason(
     if daily_count >= risk_decision.max_daily_trades:
         return "daily_trade_limit"
     return None
+
+
+def _breakout_quote_score_floor(settings: Settings) -> float:
+    threshold = float(getattr(settings, "breakout_entry_score_min", 45.0) or 45.0)
+    buffer = max(0.0, float(getattr(settings, "breakout_quote_score_buffer", 5.0) or 0.0))
+    return max(0.0, threshold - buffer)
+
+
+def _update_breakout_near_miss_cooldowns(
+    settings: Settings,
+    cycle_number: int,
+    action: str,
+    telemetry_candidate: EntryCandidate | None,
+    cooldowns: dict[str, int],
+) -> None:
+    """Temporarily rotate away from below-floor breakout telemetry symbols."""
+
+    if settings.strategy_mode != "breakout" or telemetry_candidate is None:
+        return
+
+    symbol = (telemetry_candidate.symbol or "").upper()
+    if not symbol:
+        return
+
+    if action == "ENTER":
+        cooldowns.pop(symbol, None)
+        return
+
+    score = telemetry_candidate.entry_score
+    if score is None or score >= _breakout_quote_score_floor(settings):
+        cooldowns.pop(symbol, None)
+        return
+
+    cooldown_cycles = max(0, int(getattr(settings, "breakout_near_miss_cooldown_cycles", 1) or 0))
+    if cooldown_cycles <= 0:
+        cooldowns.pop(symbol, None)
+        return
+
+    cooldowns[symbol] = cycle_number + cooldown_cycles
 
 
 def _evaluate_universe_v25(

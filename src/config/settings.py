@@ -88,6 +88,7 @@ class Settings(BaseModel):
     breakout_reference_windows_hours: list[int] = Field(default_factory=lambda: [3, 6, 24])
     breakout_entry_score_min: float = 45.0
     breakout_quote_score_buffer: float = 5.0
+    breakout_near_miss_cooldown_cycles: int = 1
     max_chase_pct: float = 0.04
     breakout_score_weight_breakout: float = 35.0
     breakout_score_weight_volume: float = 25.0
@@ -291,6 +292,7 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "breakout_reference_windows_hours": _get_int_list("BREAKOUT_REFERENCE_WINDOWS_HOURS", [3, 6, 24]),
         "breakout_entry_score_min": _get_float("BREAKOUT_ENTRY_SCORE_MIN", 45.0),
         "breakout_quote_score_buffer": _get_float("BREAKOUT_QUOTE_SCORE_BUFFER", 5.0),
+        "breakout_near_miss_cooldown_cycles": _get_int("BREAKOUT_NEAR_MISS_COOLDOWN_CYCLES", 1),
         "max_chase_pct": _get_float("MAX_CHASE_PCT", 0.04),
         "breakout_score_weight_breakout": _get_float("BREAKOUT_SCORE_WEIGHT_BREAKOUT", 35.0),
         "breakout_score_weight_volume": _get_float("BREAKOUT_SCORE_WEIGHT_VOLUME", 25.0),

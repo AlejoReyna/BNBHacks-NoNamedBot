@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,21 @@ def _settings(tmp_path: Path, **overrides: Any) -> Settings:
     }
     values.update(overrides)
     return Settings(**values)
+
+
+def _candidate(symbol: str, score: float) -> main_module.EntryCandidate:
+    return main_module.EntryCandidate(
+        symbol=symbol,
+        price=1.0,
+        position_size_usdc=0.0,
+        expected_amount_out=Decimal("0"),
+        slippage_small=None,
+        slippage_normal=None,
+        reason=f"entry score {score:.1f} below quote floor",
+        factor_scores={},
+        true_factor_count=0,
+        entry_score=score,
+    )
 
 
 def _patch_run_agent_dependencies(
@@ -86,6 +102,37 @@ def _read_decision(path: Path) -> dict[str, Any]:
     lines = path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     return json.loads(lines[0])
+
+
+def test_breakout_near_miss_cooldown_rotates_below_floor_symbol(tmp_path: Path) -> None:
+    settings = _settings(
+        tmp_path,
+        strategy_mode="breakout",
+        breakout_entry_score_min=45.0,
+        breakout_quote_score_buffer=5.0,
+        breakout_near_miss_cooldown_cycles=1,
+    )
+    cooldowns: dict[str, int] = {}
+
+    main_module._update_breakout_near_miss_cooldowns(
+        settings,
+        cycle_number=7,
+        action="WAIT",
+        telemetry_candidate=_candidate("MYX", 37.8),
+        cooldowns=cooldowns,
+    )
+
+    assert cooldowns == {"MYX": 8}
+
+    main_module._update_breakout_near_miss_cooldowns(
+        settings,
+        cycle_number=8,
+        action="WAIT",
+        telemetry_candidate=_candidate("MYX", 40.0),
+        cooldowns=cooldowns,
+    )
+
+    assert cooldowns == {}
 
 
 def test_run_agent_logs_evaluated_wait_decision(

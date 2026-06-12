@@ -27,3 +27,7 @@ context.md
 data/historical/**/*.parquet
 data/ml_ohlcv_cache.sqlite
 models/*.pkl
+SESSION-HANDOFF.md
+STRATEGY-V3-PROMPT.md
+X402-FLOW-PROMPT.md
+X402-FLOW-TEST-PROMPT.md
