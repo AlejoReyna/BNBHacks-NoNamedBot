@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
+import pytest
 import requests
 
 from src.config.settings import Settings
@@ -58,6 +60,13 @@ class FakeKeylessResponse:
 
     def raise_for_status(self) -> None:
         return None
+
+
+@pytest.fixture(autouse=True)
+def isolate_x402_spend_ledger(monkeypatch: Any, tmp_path: Path) -> None:
+    """Keep unit tests from inheriting a live spend ledger in the repo cwd."""
+
+    monkeypatch.chdir(tmp_path)
 
 
 def test_cmc_mcp_uses_documented_api_key_header() -> None:
@@ -279,7 +288,9 @@ def test_fetch_keyless_quotes_snapshot_without_api_key(monkeypatch: Any) -> None
 
     assert snapshot["CAKE"]["price"] == 10.0
     assert snapshot["CAKE"]["estimated_slippage_pct"] == 0.001
-    assert calls[0]["params"]["symbol"] == "CAKE"
+    # CAKE has a pinned UCID, so the id-preferred keyless path queries by id
+    # (ticker lookups can resolve to knockoff listings).
+    assert calls[0]["params"]["id"] == "7186"
     assert "X-CMC_PRO_API_KEY" not in calls[0]["headers"]
 
 
@@ -330,6 +341,79 @@ def test_fetch_x402_enriched_snapshot_merges_x402_quotes_and_keyless_metrics(mon
     assert snapshot["CAKE"]["high_3h"] == 2.55
     assert snapshot["CAKE"]["estimated_slippage_pct"] == 0.0015
     assert snapshot["CAKE"]["percent_change_1h"] == 0.3
+
+
+def test_fetch_x402_enriched_snapshot_splits_paid_id_and_symbol_calls(monkeypatch: Any) -> None:
+    class PaidX402Client:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, Any]] = []
+
+        def request_with_x402(self, method: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+            arguments = payload["params"]["arguments"]
+            self.calls.append(arguments)
+            if "symbol" in arguments:
+                return {
+                    "result": {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    '{"data":{"AB":{"symbol":"AB","price":1.0,"volume_24h":1000000.0},'
+                                    '"CAKE":{"symbol":"CAKE","price":0.1,"volume_24h":1000000.0}}}'
+                                ),
+                            }
+                        ]
+                    }
+                }
+            return {
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": '{"data":{"CAKE":{"symbol":"CAKE","price":2.5,"volume_24h":5000000.0}}}',
+                        }
+                    ]
+                }
+            }
+
+    def fake_get(*args: Any, **kwargs: Any) -> FakeKeylessResponse:
+        return FakeKeylessResponse({"data": {}})
+
+    paid = PaidX402Client()
+    monkeypatch.setattr(requests, "get", fake_get)
+    client = CMCMCPClient(Settings(use_keyless_primary=False), x402_client=paid)  # type: ignore[arg-type]
+
+    snapshot = client.fetch_x402_enriched_snapshot(["CAKE", "AB"])
+
+    assert paid.calls == [{"symbol": "AB"}, {"id": "7186"}]
+    assert snapshot["AB"]["price"] == 1.0
+    assert snapshot["CAKE"]["price"] == 2.5
+
+
+def test_fetch_x402_enriched_snapshot_returns_empty_when_budget_blocks_payment(monkeypatch: Any) -> None:
+    class PaidX402Client:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def request_with_x402(self, method: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+            self.calls += 1
+            return {"result": {"ok": True}}
+
+    paid = PaidX402Client()
+    client = CMCMCPClient(
+        Settings(
+            use_keyless_primary=False,
+            x402_daily_budget_usdc=0.001,
+            x402_total_budget_usdc=0.001,
+            cmc_x402_amount=0.01,
+        ),
+        x402_client=paid,  # type: ignore[arg-type]
+    )
+
+    snapshot = client.fetch_x402_enriched_snapshot(["CAKE"])
+
+    assert snapshot == {}
+    assert paid.calls == 0
 
 
 def test_build_enriched_snapshot_skips_zero_market_cap_and_volume() -> None:

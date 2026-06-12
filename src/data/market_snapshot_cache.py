@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import copy
+import json
 import logging
 import time
+from pathlib import Path
 from typing import Any, Callable
 
 LOGGER = logging.getLogger(__name__)
+
+DEFAULT_PERSIST_PATH = "logs/market_snapshot_cache.json"
 
 HOT_SNAPSHOT_FIELDS = (
     "price",
@@ -99,13 +103,45 @@ class MarketSnapshotCache:
 
 
 class DualMarketSnapshotCache:
-    """Independent TTL layers for x402-enriched and keyless quote snapshots."""
+    """Independent TTL layers for x402-enriched and keyless quote snapshots.
 
-    def __init__(self) -> None:
+    The paid x402 layer is persisted to disk (snapshot + wall-clock
+    fetched-at) so process restarts do not trigger a paid refresh while the
+    TTL is still fresh. The keyless layer is free and refetches within one
+    cycle, so it is not persisted.
+    """
+
+    def __init__(self, persist_path: str | Path | None = None) -> None:
         self._x402_enriched: dict[str, dict[str, Any]] = {}
         self._x402_fetched_at: float = 0.0
         self._keyless_quotes: dict[str, dict[str, Any]] = {}
         self._keyless_fetched_at: float = 0.0
+        self._persist_path: Path | None = Path(persist_path) if persist_path else None
+        self._load_persisted()
+
+    def x402_age_seconds(self) -> float | None:
+        """Age of the paid x402 layer, or None when no snapshot exists."""
+
+        if not self._x402_enriched:
+            return None
+        return max(0.0, time.monotonic() - self._x402_fetched_at)
+
+    def refresh_keyless(
+        self,
+        ttl_seconds: int,
+        fetcher: Callable[[], dict[str, dict[str, Any]]],
+    ) -> dict[str, dict[str, Any]]:
+        """Refresh (per TTL) and return the free keyless layer."""
+
+        self._maybe_refresh_layer(
+            layer_name="keyless",
+            snapshot_attr="_keyless_quotes",
+            fetched_at_attr="_keyless_fetched_at",
+            ttl_seconds=ttl_seconds,
+            fetcher=fetcher,
+            now=time.monotonic(),
+        )
+        return copy.deepcopy(self._keyless_quotes)
 
     def get_merged_snapshot(
         self,
@@ -113,13 +149,15 @@ class DualMarketSnapshotCache:
         keyless_ttl_seconds: int,
         x402_fetcher: Callable[[], dict[str, dict[str, Any]]],
         keyless_fetcher: Callable[[], dict[str, dict[str, Any]]],
+        *,
+        force_x402_refresh: bool = False,
     ) -> dict[str, dict[str, Any]]:
         now = time.monotonic()
         self._maybe_refresh_layer(
             layer_name="x402",
             snapshot_attr="_x402_enriched",
             fetched_at_attr="_x402_fetched_at",
-            ttl_seconds=x402_ttl_seconds,
+            ttl_seconds=0 if force_x402_refresh else x402_ttl_seconds,
             fetcher=x402_fetcher,
             now=now,
         )
@@ -174,6 +212,8 @@ class DualMarketSnapshotCache:
                 ttl_seconds,
                 len(fresh),
             )
+            if layer_name == "x402":
+                self._save_persisted()
         elif not snapshot:
             LOGGER.warning("%s market snapshot fetch returned empty and no cache exists", layer_name)
         else:
@@ -188,10 +228,58 @@ class DualMarketSnapshotCache:
         self._x402_fetched_at = 0.0
         self._keyless_quotes = {}
         self._keyless_fetched_at = 0.0
+        if self._persist_path is not None:
+            try:
+                self._persist_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    # -- disk persistence (paid x402 layer only) ----------------------------
+
+    def _load_persisted(self) -> None:
+        if self._persist_path is None or not self._persist_path.exists():
+            return
+        try:
+            payload = json.loads(self._persist_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            LOGGER.warning("Could not load persisted x402 snapshot cache: %s", exc)
+            return
+        snapshot = payload.get("x402_enriched")
+        fetched_at_epoch = payload.get("x402_fetched_at_epoch")
+        if not isinstance(snapshot, dict) or not snapshot:
+            return
+        try:
+            age = max(0.0, time.time() - float(fetched_at_epoch))
+        except (TypeError, ValueError):
+            return
+        self._x402_enriched = snapshot
+        # Translate persisted wall-clock age into this process's monotonic
+        # clock so TTL math keeps working after a restart.
+        self._x402_fetched_at = time.monotonic() - age
+        LOGGER.info(
+            "Restored persisted x402 snapshot (age=%.0fs symbols=%s); no paid refresh needed until TTL expires",
+            age,
+            len(snapshot),
+        )
+
+    def _save_persisted(self) -> None:
+        if self._persist_path is None:
+            return
+        payload = {
+            "x402_enriched": self._x402_enriched,
+            "x402_fetched_at_epoch": time.time(),
+        }
+        try:
+            self._persist_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self._persist_path.with_suffix(".tmp")
+            tmp_path.write_text(json.dumps(payload), encoding="utf-8")
+            tmp_path.replace(self._persist_path)
+        except OSError as exc:
+            LOGGER.warning("Could not persist x402 snapshot cache: %s", exc)
 
 
 _DEFAULT_CACHE = MarketSnapshotCache()
-_DEFAULT_DUAL_CACHE = DualMarketSnapshotCache()
+_DEFAULT_DUAL_CACHE = DualMarketSnapshotCache(persist_path=DEFAULT_PERSIST_PATH)
 
 
 def get_market_snapshot_cache() -> MarketSnapshotCache:

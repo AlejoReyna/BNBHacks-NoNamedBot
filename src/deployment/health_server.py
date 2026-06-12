@@ -27,6 +27,7 @@ def _tail_lines(path: Path, n: int = 50) -> list[str]:
 def start_health_server(
     state: HealthState,
     *,
+    host: str = "0.0.0.0",
     port: int = 8080,
     decision_log_path: str | Path = "decision_log.jsonl",
     dashboard_path: str | Path = "dashboard.html",
@@ -104,8 +105,8 @@ def start_health_server(
             )
             self._send_json(reply)
 
-    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    server = ThreadingHTTPServer((host, port), Handler)
     thread = threading.Thread(target=server.serve_forever, name="health-server", daemon=True)
     thread.start()
-    LOGGER.info("Health server listening on port %s", port)
+    LOGGER.info("Health server listening on %s:%s", host, port)
     return server

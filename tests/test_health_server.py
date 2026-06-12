@@ -12,7 +12,7 @@ from src.deployment.health_server import start_health_server
 def test_health_endpoint_returns_required_keys() -> None:
     state = HealthState()
     state.update(status="ok", positions=2, ml_mode="regime_fallback", daily_trades=1, drawdown_pct=4.2)
-    server = start_health_server(state, port=18080, decision_log_path="decision_log.jsonl")
+    server = start_health_server(state, host="127.0.0.1", port=18080, decision_log_path="decision_log.jsonl")
     try:
         with urllib.request.urlopen("http://127.0.0.1:18080/health", timeout=2) as resp:
             assert resp.status == 200
@@ -26,7 +26,7 @@ def test_health_endpoint_returns_required_keys() -> None:
 
 def test_chat_ui_served_at_root() -> None:
     state = HealthState()
-    server = start_health_server(state, port=18081, chat_path="static/chat.html")
+    server = start_health_server(state, host="127.0.0.1", port=18081, chat_path="static/chat.html")
     try:
         with urllib.request.urlopen("http://127.0.0.1:18081/", timeout=2) as resp:
             html = resp.read().decode("utf-8")

@@ -35,10 +35,19 @@ class Settings(BaseModel):
     x402_total_budget_usdc: float = 15.0
     x402_failure_cooldown_seconds: int = 900
     x402_in_position_ttl_seconds: int = 1800
+    # Open positions below this total value (dust) do NOT activate the short
+    # in-position x402 TTL; the flat heartbeat TTL applies instead.
+    x402_min_position_value_usdc: float = 5.0
+    # Force a paid refresh when a hot candidate appears and the enriched
+    # snapshot is older than this.
+    x402_hot_refresh_age_seconds: int = 600
+    # Paid enrichment scope: top-N candidates by cheap rank (0 = all targets).
+    # The full universe stays visible via the free keyless path every cycle.
+    x402_enrich_top_n: int = 50
     use_keyless_primary: bool = False
     use_dual_market_data: bool = False
     cmc_keyless_base_url: str = "https://pro-api.coinmarketcap.com/trial-pro-api/v3"
-    cmc_snapshot_ttl_seconds: int = 7200
+    cmc_snapshot_ttl_seconds: int = 14400
     cmc_keyless_snapshot_ttl_seconds: int = 300
     paper_trade: bool = True
     loop_seconds: int = 300
@@ -204,13 +213,16 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "x402_total_budget_usdc": _get_float("X402_TOTAL_BUDGET_USDC", 15.0),
         "x402_failure_cooldown_seconds": _get_int("X402_FAILURE_COOLDOWN_SECONDS", 900),
         "x402_in_position_ttl_seconds": _get_int("X402_IN_POSITION_TTL_SECONDS", 1800),
+        "x402_min_position_value_usdc": _get_float("X402_MIN_POSITION_VALUE_USDC", 5.0),
+        "x402_hot_refresh_age_seconds": _get_int("X402_HOT_REFRESH_AGE_SECONDS", 600),
+        "x402_enrich_top_n": _get_int("X402_ENRICH_TOP_N", 50),
         "use_keyless_primary": use_keyless_primary,
         "use_dual_market_data": use_dual_market_data,
         "cmc_keyless_base_url": os.getenv(
             "CMC_KEYLESS_BASE_URL",
             "https://pro-api.coinmarketcap.com/trial-pro-api/v3",
         ),
-        "cmc_snapshot_ttl_seconds": _get_int("CMC_SNAPSHOT_TTL_SECONDS", 7200),
+        "cmc_snapshot_ttl_seconds": _get_int("CMC_SNAPSHOT_TTL_SECONDS", 14400),
         "cmc_keyless_snapshot_ttl_seconds": _get_int(
             "CMC_KEYLESS_SNAPSHOT_TTL_SECONDS",
             loop_seconds,

@@ -78,7 +78,7 @@ def _patch_run_agent_dependencies(
     monkeypatch.setattr(
         main_module,
         "_fetch_snapshot",
-        lambda settings, cmc_client, in_position=False: {"CAKE": {"symbol": "CAKE", "price": 2.0}},
+        lambda settings, cmc_client, **kwargs: {"CAKE": {"symbol": "CAKE", "price": 2.0}},
     )
 
 

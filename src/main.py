@@ -33,6 +33,7 @@ from src.config.tokens import (
     is_momentum_candidate_symbol,
 )
 from src.data.cmc_mcp_client import CMCMCPClient
+from src.data.enrichment_planner import hot_candidate_symbols, select_enrichment_symbols
 from src.data.market_snapshot_cache import get_dual_market_snapshot_cache, get_market_snapshot_cache
 from src.execution import liquidity_analyzer as liquidity_analyzer_module
 from src.execution.bnb_toolkit_wrapper import BnbToolkitWrapper
@@ -472,10 +473,15 @@ def run_agent(settings: Settings, max_cycles: int | None = None) -> None:
     while running:
         cycle_number = cycles_completed + 1
         now_utc = datetime.now(timezone.utc)
+        open_positions = position_manager.list_open_positions()
         market_snapshot = _fetch_snapshot(
             settings,
             cmc_client,
-            in_position=bool(position_manager.list_open_positions()),
+            open_position_value_usdc=sum(
+                float(getattr(position, "entry_value_usdc", 0.0) or 0.0)
+                for position in open_positions
+            ),
+            position_symbols={position.symbol.upper() for position in open_positions},
         )
         _update_price_cache(price_cache, market_snapshot, now_utc)
         if needs_balance_reconstruction:
@@ -1637,29 +1643,71 @@ if not hasattr(scoring, "evaluate_universe"):
 def _fetch_snapshot(
     settings: Settings,
     cmc_client: CMCMCPClient,
-    in_position: bool = False,
+    open_position_value_usdc: float = 0.0,
+    position_symbols: set[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     if settings.paper_trade:
         return _paper_market_snapshot()
 
     if settings.use_dual_market_data and not settings.use_keyless_primary:
         keyless_ttl = settings.cmc_keyless_snapshot_ttl_seconds or settings.loop_seconds
-        # Keep paid x402 enrichment fresh enough for short-window breakout
-        # factors even while flat; the spend governor still enforces budget.
-        x402_refresh_ttl = getattr(settings, "x402_in_position_ttl_seconds", 1800) or 1800
-        x402_ttl = min(settings.cmc_snapshot_ttl_seconds, x402_refresh_ttl)
+        # Event-driven paid enrichment: the short in-position TTL only applies
+        # when open positions are above the dust threshold; otherwise the flat
+        # heartbeat TTL governs and hot candidates force ad-hoc refreshes.
+        dust_threshold = float(getattr(settings, "x402_min_position_value_usdc", 5.0))
+        real_position = open_position_value_usdc >= dust_threshold
+        if real_position:
+            in_position_ttl = getattr(settings, "x402_in_position_ttl_seconds", 1800) or 1800
+            x402_ttl = min(settings.cmc_snapshot_ttl_seconds, in_position_ttl)
+        else:
+            x402_ttl = settings.cmc_snapshot_ttl_seconds
+            if open_position_value_usdc > 0:
+                LOGGER.debug(
+                    "Open positions worth $%.2f are below dust threshold $%.2f; using flat x402 TTL %ss",
+                    open_position_value_usdc,
+                    dust_threshold,
+                    x402_ttl,
+                )
 
-        def _load_dual() -> dict[str, dict[str, Any]]:
-            snapshot = get_dual_market_snapshot_cache().get_merged_snapshot(
-                x402_ttl,
-                keyless_ttl,
-                lambda: cmc_client.fetch_x402_enriched_snapshot(TARGET_SYMBOLS),
-                lambda: cmc_client.fetch_keyless_quotes_snapshot(TARGET_SYMBOLS),
-            )
-            _ensure_bnb_reference(snapshot, cmc_client)
-            return snapshot
+        cache = get_dual_market_snapshot_cache()
 
-        return _load_dual()
+        def _fetch_keyless() -> dict[str, dict[str, Any]]:
+            return cmc_client.fetch_keyless_quotes_snapshot(TARGET_SYMBOLS)
+
+        # Refresh the FREE keyless layer first so hot-candidate detection and
+        # enrichment scoping run on current prices before any paid call.
+        keyless_snapshot = cache.refresh_keyless(keyless_ttl, _fetch_keyless)
+
+        force_x402 = False
+        x402_age = cache.x402_age_seconds()
+        hot_age = getattr(settings, "x402_hot_refresh_age_seconds", 600)
+        if x402_age is not None and x402_age > hot_age and x402_age < x402_ttl:
+            hot_symbols = hot_candidate_symbols(keyless_snapshot, settings)
+            if hot_symbols:
+                force_x402 = True
+                LOGGER.info(
+                    "Hot candidates %s passed both cheap core gates; forcing paid x402 refresh (age=%.0fs > %ss)",
+                    hot_symbols,
+                    x402_age,
+                    hot_age,
+                )
+
+        enrich_symbols = select_enrichment_symbols(
+            keyless_snapshot,
+            list(TARGET_SYMBOLS),
+            position_symbols or set(),
+            settings,
+        )
+
+        snapshot = cache.get_merged_snapshot(
+            x402_ttl,
+            keyless_ttl,
+            lambda: cmc_client.fetch_x402_enriched_snapshot(enrich_symbols),
+            _fetch_keyless,
+            force_x402_refresh=force_x402,
+        )
+        _ensure_bnb_reference(snapshot, cmc_client)
+        return snapshot
 
     def _load() -> dict[str, dict[str, Any]]:
         snapshot = cmc_client.fetch_market_snapshot(TARGET_SYMBOLS)

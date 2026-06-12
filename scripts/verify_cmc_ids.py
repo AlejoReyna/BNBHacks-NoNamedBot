@@ -33,6 +33,10 @@ def main() -> int:
     rows = data if isinstance(data, dict) else {}
 
     by_symbol = {str(v.get("symbol", "")).upper(): v for v in rows.values() if isinstance(v, dict)}
+    sample = next(iter(by_symbol.values()), None)
+    if isinstance(sample, dict):
+        print("sample row keys:", sorted(sample.keys()))
+    print("verify_cmc_ids v2 (production price reader)")
     print(f"{'SYMBOL':10} {'PINNED_ID':>9}  {'NAME':32} {'PRICE':>14}  STATUS")
     problems = 0
     for sym, cid in sorted(pinned.items()):
@@ -42,11 +46,12 @@ def main() -> int:
             problems += 1
             continue
         name = str(row.get("name", ""))[:32]
-        price = row.get("price")
-        if price is None:  # production reads nested quote.USD.price too
-            quote = row.get("quote")
-            usd = quote.get("USD") if isinstance(quote, dict) else None
-            price = usd.get("price") if isinstance(usd, dict) else None
+        # exactly what _snapshot_from_quotes does in production
+        price = client._first_number_from_many(  # noqa: SLF001
+            [row],
+            ("price", "last_price", "quote.USD.price"),
+            skip_zero=True,
+        )
         ok = price is not None
         status = "ok" if ok else "NULL PRICE - WRONG ID?"
         if not ok:

@@ -70,14 +70,16 @@ def test_load_settings_reads_cmc_snapshot_ttl_seconds(monkeypatch: object, tmp_p
     assert settings.cmc_snapshot_ttl_seconds == 3600
 
 
-def test_load_settings_defaults_cmc_snapshot_ttl_to_two_hours(monkeypatch: object, tmp_path: Path) -> None:
+def test_load_settings_defaults_cmc_snapshot_ttl_to_four_hours(monkeypatch: object, tmp_path: Path) -> None:
+    # Flat heartbeat TTL for the paid x402 layer; event triggers (hot
+    # candidates, real positions) refresh sooner when it matters.
     env_path = tmp_path / ".env"
     env_path.write_text("", encoding="utf-8")
     monkeypatch.delenv("CMC_SNAPSHOT_TTL_SECONDS", raising=False)  # type: ignore[attr-defined]
 
     settings = load_settings(str(env_path))
 
-    assert settings.cmc_snapshot_ttl_seconds == 7200
+    assert settings.cmc_snapshot_ttl_seconds == 14400
 
 
 def test_load_settings_does_not_expose_cmc_ephemeral_key(monkeypatch: object, tmp_path: Path) -> None:

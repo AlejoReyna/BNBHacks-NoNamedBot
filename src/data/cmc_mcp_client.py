@@ -305,7 +305,9 @@ class CMCMCPClient:
         if not self.settings.use_keyless_primary:
             if self.settings.use_dual_market_data:
                 return self.fetch_x402_enriched_snapshot(normalized_symbols)
-            return self._snapshot_from_quotes(normalized_symbols, quotes)
+            return self._snapshot_from_quotes(
+                normalized_symbols, quotes, source="x402 (paid, keyless on fallback)"
+            )
 
         technicals = self._fetch_combined_payload(
             normalized_symbols,
@@ -347,10 +349,7 @@ class CMCMCPClient:
         if not normalized_symbols:
             return {}
 
-        quotes = self._fetch_combined_payload(
-            normalized_symbols,
-            self._fetch_x402_quotes_batch,
-        )
+        quotes = self._fetch_x402_quotes_id_preferred(normalized_symbols)
         if not quotes:
             LOGGER.warning("x402 quotes unavailable; skipping enriched snapshot")
             return {}
@@ -399,13 +398,37 @@ class CMCMCPClient:
                 merged.update(data)  # id-based results override ticker results
         return {"data": merged}
 
-    def _fetch_x402_quotes_batch(self, symbols: list[str]) -> dict[str, Any]:
+    def _fetch_x402_quotes_id_preferred(self, symbols: list[str]) -> dict[str, Any]:
+        """Fetch paid x402 quotes by CMC id when pinned, by ticker otherwise.
+
+        Mirrors ``_fetch_keyless_id_preferred``: ticker lookups can resolve to
+        knockoff listings, and we never want to pay $0.01 for knockoff data.
+        Partitioning before batching keeps each paid call unambiguous (id-only
+        or ticker-only, never both) at the cost of at most one extra paid call
+        per refresh when the universe mixes pinned and unpinned symbols.
+        """
+
+        with_id = [s for s in symbols if resolve_cmc_coin_id(s)]
+        without_id = [s for s in symbols if not resolve_cmc_coin_id(s)]
+        merged: dict[str, Any] = {}
+        if without_id:
+            payload = self._fetch_combined_payload(without_id, self._fetch_x402_quotes_by_symbol)
+            merged.update(self._by_symbol(payload))
+        if with_id:
+            payload = self._fetch_combined_payload(with_id, self._fetch_x402_quotes_by_id)
+            merged.update(self._by_symbol(payload))  # id-based results win
+        return merged
+
+    def _fetch_x402_quotes_by_id(self, symbols: list[str]) -> dict[str, Any]:
         return self._call_tool_x402(
             "get_crypto_quotes_latest",
-            {
-                "id": self._symbols_to_id_arg(symbols),
-                "symbol": self._symbols_to_symbol_arg(symbols),
-            },
+            {"id": self._symbols_to_id_arg(symbols)},
+        )
+
+    def _fetch_x402_quotes_by_symbol(self, symbols: list[str]) -> dict[str, Any]:
+        return self._call_tool_x402(
+            "get_crypto_quotes_latest",
+            {"symbol": self._symbols_to_symbol_arg(symbols)},
         )
 
     def _build_enriched_snapshot(
@@ -500,8 +523,9 @@ class CMCMCPClient:
         self,
         normalized_symbols: list[str],
         quotes: dict[str, Any],
+        source: str = "keyless (free, $0.00)",
     ) -> dict[str, Any]:
-        """Build a strategy snapshot from paid x402 quote payloads only."""
+        """Build a strategy snapshot from quote payloads only (no enrichment)."""
 
         quotes_by_symbol = self._by_symbol(quotes)
         bnb_trend = self._first_number(
@@ -561,7 +585,7 @@ class CMCMCPClient:
                 "bnb_1h_trend_pct": bnb_trend,
                 "estimated_slippage_pct": estimated_slippage_pct,
             }
-        LOGGER.info("Built x402 quotes-only snapshot for %d symbols", len(snapshot))
+        LOGGER.info("Built %s quotes-only snapshot for %d symbols", source, len(snapshot))
         return snapshot
 
     def _call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -625,7 +649,7 @@ class CMCMCPClient:
         """Always route through x402 payment (never keyless-primary shortcut)."""
 
         if not self.spend_governor.allow_call():
-            return self._fetch_keyless(tool_name, arguments)
+            return {}
 
         envelope = {
             "jsonrpc": "2.0",
@@ -656,7 +680,7 @@ class CMCMCPClient:
         except Exception as exc:
             LOGGER.warning("CMC MCP x402 call %s failed: %s", tool_name, exc)
             self.spend_governor.record_failure()
-            return self._fetch_keyless(tool_name, arguments)
+            return {}
 
         if not isinstance(payload, dict):
             LOGGER.warning("CMC MCP x402 call %s returned non-dict JSON; using empty fallback", tool_name)
