@@ -519,9 +519,16 @@ def run_agent(settings: Settings, max_cycles: int | None = None) -> None:
         action = "WAIT"
         entry_position_pct = 0.0
         entries_allowed = _risk_allows_new_entries(guardrails, risk_decision, portfolio_value, settings)
+        entries_blocked_reason = None if entries_allowed else _entries_blocked_reason(
+            guardrails,
+            risk_decision,
+            portfolio_value,
+            settings,
+        )
         decision_reasons_pre: list[str] = []
         if entries_allowed and not disk_allows_entries(settings):
             entries_allowed = False
+            entries_blocked_reason = "disk_guard_free_space_below_threshold"
             decision_reasons_pre.append("disk guard: free space below threshold")
         decision_reasons = list(risk_decision.reasons) + decision_reasons_pre
         cycle_status = "ok"
@@ -562,6 +569,7 @@ def run_agent(settings: Settings, max_cycles: int | None = None) -> None:
                 position_pct=entry_position_pct,
                 liquidity=liquidity,
                 position_count=len(position_manager.list_open_positions()),
+                entries_blocked_reason="risk_state:kill_switch",
             )
             if position_manager.list_open_positions():
                 emergency_liquidate(position_manager, router, guardrails)
@@ -753,6 +761,7 @@ def run_agent(settings: Settings, max_cycles: int | None = None) -> None:
             position_pct=entry_position_pct,
             liquidity=liquidity,
             position_count=len(position_manager.list_open_positions()),
+            entries_blocked_reason=entries_blocked_reason,
         )
         if shadow_logger is not None:
             try:
@@ -916,6 +925,25 @@ def _risk_allows_new_entries(
         return guardrails.scalping_entries_allowed(portfolio_value)
     daily_count = int(getattr(guardrails, "_daily_trade_count", 0))
     return daily_count < risk_decision.max_daily_trades
+
+
+def _entries_blocked_reason(
+    guardrails: Guardrails,
+    risk_decision: RiskDecision,
+    portfolio_value: float,
+    settings: Settings,
+) -> str | None:
+    """Return a stable reason code when new entries are globally blocked."""
+
+    if not risk_decision.allow_new_entries:
+        return f"risk_state:{risk_decision.state.value}"
+    if settings.strategy_mode == "scalping" and isinstance(guardrails, ScalpingGuardrails):
+        if not guardrails.scalping_entries_allowed(portfolio_value):
+            return "scalping_guardrails"
+    daily_count = int(getattr(guardrails, "_daily_trade_count", 0))
+    if daily_count >= risk_decision.max_daily_trades:
+        return "daily_trade_limit"
+    return None
 
 
 def _evaluate_universe_v25(
@@ -1092,6 +1120,7 @@ def _attempt_entry_v25(
         )
         if getattr(liquidity, "recommendation", "") == "REDUCE_SIZE":
             position_pct *= 0.5
+        position_pct *= max(0.0, float(getattr(candidate, "position_size_multiplier", 1.0) or 1.0))
         position_usd = portfolio_value * position_pct
     if candidate.factor_scores.get("regime_not_risk_off") is False:
         position_pct *= 0.5
@@ -1525,6 +1554,7 @@ def _log_legacy_cycle_from_v25(
     position_pct: float,
     liquidity: Any | None,
     position_count: int,
+    entries_blocked_reason: str | None = None,
 ) -> None:
     decision = _breakout_decision_from_candidate(
         candidate,
@@ -1546,6 +1576,7 @@ def _log_legacy_cycle_from_v25(
         reason=reason,
         strategy_mode=settings.strategy_mode,
         entry_score=candidate.entry_score if candidate else None,
+        entries_blocked_reason=entries_blocked_reason,
         exit_reason=exit_meta.get("exit_reason") if exit_meta else None,
         hold_time_seconds=exit_meta.get("hold_time_seconds") if exit_meta else None,
         ml_regime=_ml_fields_from_candidate(candidate).get("ml_regime"),
@@ -1575,6 +1606,8 @@ def _breakout_decision_from_candidate(
         true_factor_count=candidate.true_factor_count,
         reason=reason or candidate.reason,
         estimated_slippage_pct=getattr(liquidity, "slippage_normal", candidate.slippage_normal),
+        entry_score=candidate.entry_score,
+        position_size_multiplier=candidate.position_size_multiplier,
     )
 
 
@@ -2221,6 +2254,7 @@ def _log_cycle_decision(
     reason: str | None = None,
     strategy_mode: str | None = None,
     entry_score: float | None = None,
+    entries_blocked_reason: str | None = None,
     exit_reason: str | None = None,
     hold_time_seconds: int | None = None,
     ml_regime: str | None = None,
@@ -2272,6 +2306,7 @@ def _log_cycle_decision(
         estimated_slippage_pct=estimated_slippage,
         strategy_mode=strategy_mode,
         entry_score=entry_score,
+        entries_blocked_reason=entries_blocked_reason,
         exit_reason=exit_reason,
         hold_time_seconds=hold_time_seconds,
         ml_regime=ml_regime,

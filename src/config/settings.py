@@ -58,7 +58,7 @@ class Settings(BaseModel):
     max_slippage_pct: float = 0.01
     drawdown_soft_stop_pct: float = 0.10
     drawdown_kill_switch_pct: float = 0.18
-    trailing_stop_pct: float = 0.035
+    trailing_stop_pct: float = 0.06
     take_profit_pct: float = 0.08
     base_risk_per_trade_pct: float = 0.0035
     risk_off_max_slippage_pct: float = 0.005
@@ -85,6 +85,20 @@ class Settings(BaseModel):
     # 0.2% buffer avoids chasing tiny noisy ticks that can inflate drawdown.
     breakout_lookback_hours: int = 3
     breakout_buffer: float = 0.002
+    breakout_reference_windows_hours: list[int] = Field(default_factory=lambda: [3, 6, 24])
+    breakout_entry_score_min: float = 45.0
+    breakout_quote_score_buffer: float = 5.0
+    max_chase_pct: float = 0.04
+    breakout_score_weight_breakout: float = 35.0
+    breakout_score_weight_volume: float = 25.0
+    breakout_score_weight_momentum: float = 15.0
+    breakout_score_weight_rsi: float = 10.0
+    breakout_score_weight_derivatives: float = 10.0
+    breakout_score_weight_macro: float = 5.0
+    trail_step1_profit_pct: float = 0.08
+    trail_step1_stop_pct: float = 0.04
+    trail_step2_profit_pct: float = 0.12
+    trail_step2_stop_pct: float = 0.03
     # Minimum passing count across the three actionable core entry factors;
     # regime is logged separately and applied as a size modifier.
     min_entry_factors: int = Field(default=3, ge=1, le=4)
@@ -171,6 +185,13 @@ def _get_symbol_list(name: str, default: list[str]) -> list[str]:
     return [item.strip().upper() for item in value.split(",") if item.strip()]
 
 
+def _get_int_list(name: str, default: list[int]) -> list[int]:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return list(default)
+    return [int(item.strip()) for item in value.split(",") if item.strip()]
+
+
 def load_settings(dotenv_path: str | None = None) -> Settings:
     """Load settings from .env and the current process environment."""
 
@@ -236,7 +257,7 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "max_slippage_pct": _get_float("MAX_SLIPPAGE_PCT", 0.01),
         "drawdown_soft_stop_pct": _get_float("DRAWDOWN_SOFT_STOP_PCT", 0.10),
         "drawdown_kill_switch_pct": _get_float("DRAWDOWN_KILL_SWITCH_PCT", 0.18),
-        "trailing_stop_pct": _get_float("TRAILING_STOP_PCT", 0.035),
+        "trailing_stop_pct": _get_float("TRAILING_STOP_PCT", 0.06),
         "take_profit_pct": _get_float("TAKE_PROFIT_PCT", 0.08),
         "base_risk_per_trade_pct": _get_float("BASE_RISK_PER_TRADE_PCT", 0.0035),
         "risk_off_max_slippage_pct": _get_float("RISK_OFF_MAX_SLIPPAGE_PCT", 0.005),
@@ -267,6 +288,20 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "token_regime_24h_min": _get_float("TOKEN_REGIME_24H_MIN", -0.08),
         "breakout_lookback_hours": _get_int("BREAKOUT_LOOKBACK_HOURS", 3),
         "breakout_buffer": _get_float("BREAKOUT_BUFFER", 0.002),
+        "breakout_reference_windows_hours": _get_int_list("BREAKOUT_REFERENCE_WINDOWS_HOURS", [3, 6, 24]),
+        "breakout_entry_score_min": _get_float("BREAKOUT_ENTRY_SCORE_MIN", 45.0),
+        "breakout_quote_score_buffer": _get_float("BREAKOUT_QUOTE_SCORE_BUFFER", 5.0),
+        "max_chase_pct": _get_float("MAX_CHASE_PCT", 0.04),
+        "breakout_score_weight_breakout": _get_float("BREAKOUT_SCORE_WEIGHT_BREAKOUT", 35.0),
+        "breakout_score_weight_volume": _get_float("BREAKOUT_SCORE_WEIGHT_VOLUME", 25.0),
+        "breakout_score_weight_momentum": _get_float("BREAKOUT_SCORE_WEIGHT_MOMENTUM", 15.0),
+        "breakout_score_weight_rsi": _get_float("BREAKOUT_SCORE_WEIGHT_RSI", 10.0),
+        "breakout_score_weight_derivatives": _get_float("BREAKOUT_SCORE_WEIGHT_DERIVATIVES", 10.0),
+        "breakout_score_weight_macro": _get_float("BREAKOUT_SCORE_WEIGHT_MACRO", 5.0),
+        "trail_step1_profit_pct": _get_float("TRAIL_STEP1_PROFIT_PCT", 0.08),
+        "trail_step1_stop_pct": _get_float("TRAIL_STEP1_STOP_PCT", 0.04),
+        "trail_step2_profit_pct": _get_float("TRAIL_STEP2_PROFIT_PCT", 0.12),
+        "trail_step2_stop_pct": _get_float("TRAIL_STEP2_STOP_PCT", 0.03),
         "min_entry_factors": _get_int("MIN_ENTRY_FACTORS", 4),
         "regime_size_multiplier": _get_float("REGIME_SIZE_MULTIPLIER", 0.5),
         "log_level": os.getenv("LOG_LEVEL", "INFO"),

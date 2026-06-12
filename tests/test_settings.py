@@ -129,6 +129,41 @@ def test_load_settings_respects_explicit_dual_disable(monkeypatch: object, tmp_p
     assert settings.use_dual_market_data is False
 
 
+def test_load_settings_reads_scored_breakout_knobs(monkeypatch: object, tmp_path: Path) -> None:
+    for name in (
+        "BREAKOUT_REFERENCE_WINDOWS_HOURS",
+        "BREAKOUT_ENTRY_SCORE_MIN",
+        "BREAKOUT_QUOTE_SCORE_BUFFER",
+        "MAX_CHASE_PCT",
+        "TRAIL_STEP1_PROFIT_PCT",
+        "TRAIL_STEP2_STOP_PCT",
+    ):
+        monkeypatch.delenv(name, raising=False)  # type: ignore[attr-defined]
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "BREAKOUT_REFERENCE_WINDOWS_HOURS=3,6,24",
+                "BREAKOUT_ENTRY_SCORE_MIN=47",
+                "BREAKOUT_QUOTE_SCORE_BUFFER=4",
+                "MAX_CHASE_PCT=0.03",
+                "TRAIL_STEP1_PROFIT_PCT=0.09",
+                "TRAIL_STEP2_STOP_PCT=0.025",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(str(env_path))
+
+    assert settings.breakout_reference_windows_hours == [3, 6, 24]
+    assert settings.breakout_entry_score_min == 47
+    assert settings.breakout_quote_score_buffer == 4
+    assert settings.max_chase_pct == 0.03
+    assert settings.trail_step1_profit_pct == 0.09
+    assert settings.trail_step2_stop_pct == 0.025
+
+
 def test_min_entry_factors_is_bounded_to_core_factor_count() -> None:
     assert Settings(min_entry_factors=4).min_entry_factors == 4
 

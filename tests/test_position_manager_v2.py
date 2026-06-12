@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from src.strategy.position_manager import calculate_exit_levels, calculate_position_pct
+from pathlib import Path
+
+from src.config.settings import Settings
+from src.strategy.position_manager import PositionManager, calculate_exit_levels, calculate_position_pct
 from src.strategy.regime_detector import MarketRegime
 
 
@@ -47,3 +50,23 @@ def test_missing_atr_uses_one_percent_fallback_edge() -> None:
 
 def test_zero_equity_returns_zero_edge() -> None:
     assert calculate_position_pct(0.0, 0.02, 1.0, 1.0, 0) == 0.0
+
+
+def test_position_manager_tightens_trailing_stop_in_profit_steps(tmp_path: Path) -> None:
+    settings = Settings(
+        position_state_path=str(tmp_path / "positions.json"),
+        trailing_stop_pct=0.06,
+        take_profit_pct=0.20,
+    )
+    manager = PositionManager(settings)
+    manager.open_position("CAKE", amount_tokens=1.0, entry_price=100.0, entry_value_usdc=100.0)
+
+    assert manager.update_price("CAKE", 108.0) is None
+    position = manager.get_position("CAKE")
+    assert position is not None
+    assert round(position.trailing_stop_price, 2) == 103.68
+
+    assert manager.update_price("CAKE", 112.0) is None
+    position = manager.get_position("CAKE")
+    assert position is not None
+    assert round(position.trailing_stop_price, 2) == 108.64

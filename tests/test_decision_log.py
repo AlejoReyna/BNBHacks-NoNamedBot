@@ -53,3 +53,23 @@ def test_decision_log_writes_jsonl_record(tmp_path: object) -> None:
     assert record["factor_scores"] == {"slippage_under_cap": True}
     assert record["estimated_slippage_pct"] == 0.005
     assert "timestamp" in record
+
+
+def test_decision_log_writes_blocked_reason_when_present(tmp_path: object) -> None:
+    log_path = tmp_path / "decision_log.jsonl"  # type: ignore[operator]
+    logger = DecisionLogger(log_path)
+
+    logger.log(
+        cycle_number=4,
+        mode="live",
+        portfolio_value_usdc=10.0,
+        position_count=0,
+        entries_allowed=False,
+        action="BLOCKED",
+        reason="disk guard: free space below threshold",
+        priced_target_count=147,
+        entries_blocked_reason="disk_guard_free_space_below_threshold",
+    )
+
+    record = json.loads(log_path.read_text(encoding="utf-8"))
+    assert record["entries_blocked_reason"] == "disk_guard_free_space_below_threshold"

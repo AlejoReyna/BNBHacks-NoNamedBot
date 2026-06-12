@@ -61,6 +61,7 @@ def breakout_decision_to_candidate(
     if for_telemetry and not decision.should_enter:
         position_size = 0.0
     ml_context = getattr(decision, "ml_context", None)
+    position_size_multiplier = float(getattr(decision, "position_size_multiplier", 1.0) or 1.0)
     if ml_context is not None and position_size > 0:
         position_size *= float(getattr(ml_context, "position_size_multiplier", 1.0))
     slippage_normal = decision.estimated_slippage_pct
@@ -78,6 +79,8 @@ def breakout_decision_to_candidate(
         factor_scores=dict(decision.factor_scores),
         true_factor_count=decision.true_factor_count,
         source="breakout_engine",
+        entry_score=maybe_number(getattr(decision, "entry_score", None)),
+        position_size_multiplier=position_size_multiplier,
         strategy_mode="breakout",
         ml_context=ml_context,
     )
@@ -114,5 +117,6 @@ def coerce_entry_candidate(
         true_factor_count=int(getattr(candidate, "true_factor_count", 0) or 0),
         source=str(getattr(candidate, "source", "scoring")),
         entry_score=maybe_number(getattr(candidate, "entry_score", None)),
+        position_size_multiplier=maybe_number(getattr(candidate, "position_size_multiplier", None)) or 1.0,
         strategy_mode=str(getattr(candidate, "strategy_mode", "breakout")),
     )

@@ -22,6 +22,7 @@ class EntryCandidate:
     true_factor_count: int
     source: str = "scoring_v25"
     entry_score: float | None = None
+    position_size_multiplier: float = 1.0
     strategy_mode: str = "breakout"
     ml_context: Any | None = None
     ml_ranking: dict[str, Any] | None = None

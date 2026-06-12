@@ -314,7 +314,16 @@ def test_fetch_x402_enriched_snapshot_merges_x402_quotes_and_keyless_metrics(mon
     def fake_get(*args: Any, **kwargs: Any) -> FakeKeylessResponse:
         url = str(args[0])
         if url.endswith("/global-metrics/quotes/latest"):
-            return FakeKeylessResponse({"data": {"funding_rate_avg": 0.0002}})
+            return FakeKeylessResponse(
+                {
+                    "data": {
+                        "funding_rate_avg": 0.0002,
+                        "total_market_cap": 2_500_000_000_000.0,
+                        "btc_dominance": 52.5,
+                        "stablecoin_market_cap": 150_000_000_000.0,
+                    }
+                }
+            )
         return FakeKeylessResponse(
             {
                 "data": {
@@ -341,6 +350,9 @@ def test_fetch_x402_enriched_snapshot_merges_x402_quotes_and_keyless_metrics(mon
     assert snapshot["CAKE"]["high_3h"] == 2.55
     assert snapshot["CAKE"]["estimated_slippage_pct"] == 0.0015
     assert snapshot["CAKE"]["percent_change_1h"] == 0.3
+    assert snapshot["CAKE"]["macro_total_market_cap"] == 2_500_000_000_000.0
+    assert snapshot["CAKE"]["macro_btc_dominance"] == 52.5
+    assert snapshot["CAKE"]["macro_stablecoin_dominance"] == 6.0
 
 
 def test_fetch_x402_enriched_snapshot_paid_calls_are_id_only(monkeypatch: Any) -> None:

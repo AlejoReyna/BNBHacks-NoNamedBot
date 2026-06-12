@@ -55,6 +55,7 @@ def breakout_decision_to_candidate(
     position_size = decision.position_size_usdc
     if position_size <= 0:
         position_size = portfolio_value * settings.max_position_pct * risk_decision.position_multiplier
+    position_size_multiplier = float(getattr(decision, "position_size_multiplier", 1.0) or 1.0)
     slippage_normal = decision.estimated_slippage_pct
     slippage_small = maybe_number(token_data.get("estimated_slippage_small_pct"))
     if slippage_small is None and slippage_normal is not None:
@@ -70,6 +71,8 @@ def breakout_decision_to_candidate(
         factor_scores=dict(decision.factor_scores),
         true_factor_count=decision.true_factor_count,
         source="breakout_engine",
+        entry_score=maybe_number(getattr(decision, "entry_score", None)),
+        position_size_multiplier=position_size_multiplier,
         strategy_mode="breakout",
     )
 
@@ -105,5 +108,6 @@ def coerce_entry_candidate(
         true_factor_count=int(getattr(candidate, "true_factor_count", 0) or 0),
         source=str(getattr(candidate, "source", "scoring")),
         entry_score=maybe_number(getattr(candidate, "entry_score", None)),
+        position_size_multiplier=maybe_number(getattr(candidate, "position_size_multiplier", None)) or 1.0,
         strategy_mode=str(getattr(candidate, "strategy_mode", "breakout")),
     )

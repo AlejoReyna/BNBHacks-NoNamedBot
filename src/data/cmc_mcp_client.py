@@ -474,6 +474,7 @@ class CMCMCPClient:
         quotes_by_symbol = self._by_symbol(quotes)
         technicals_by_symbol = self._by_symbol(technicals)
         metrics_by_symbol = self._by_symbol(market_metrics)
+        macro_context = self._macro_context_from_global_metrics(derivatives)
         bnb_trend = self._first_number(
             quotes_by_symbol.get("BNB", quotes_by_symbol.get("WBNB", {})),
             ("bnb_1h_trend_pct", "percent_change_1h", "price_change_percentage_1h", "change_1h"),
@@ -547,6 +548,7 @@ class CMCMCPClient:
                     combined,
                     ("open_interest_change_pct", "oi_change_pct", "open_interest_24h_change_pct"),
                 ),
+                **macro_context,
             }
         LOGGER.info("Built enriched x402 snapshot for %d symbols", len(snapshot))
         return snapshot
@@ -854,6 +856,47 @@ class CMCMCPClient:
         if liquidity_score > 0.01:
             return 0.002
         return 0.005
+
+    @classmethod
+    def _macro_context_from_global_metrics(cls, payload: dict[str, Any]) -> dict[str, float]:
+        data = payload.get("data") if isinstance(payload, dict) else None
+        metrics = data if isinstance(data, dict) else payload
+        if not isinstance(metrics, dict):
+            return {}
+        total_market_cap = cls._first_number(
+            metrics,
+            (
+                "quote.USD.total_market_cap",
+                "total_market_cap",
+                "total_market_cap_usd",
+                "total_market_cap_yesterday",
+            ),
+            skip_zero=True,
+        )
+        btc_dominance = cls._first_number(
+            metrics,
+            ("btc_dominance", "btc_dominance_percentage", "bitcoin_dominance"),
+        )
+        stablecoin_dominance = cls._first_number(
+            metrics,
+            ("stablecoin_dominance", "stablecoin_dominance_percentage", "stablecoin_market_cap_dominance"),
+        )
+        stablecoin_market_cap = cls._first_number(
+            metrics,
+            ("stablecoin_market_cap", "stablecoin_market_cap_usd"),
+            skip_zero=True,
+        )
+        if stablecoin_dominance is None and total_market_cap and stablecoin_market_cap:
+            stablecoin_dominance = stablecoin_market_cap / total_market_cap * 100.0
+
+        context: dict[str, float] = {}
+        if total_market_cap is not None:
+            context["macro_total_market_cap"] = total_market_cap
+        if btc_dominance is not None:
+            context["macro_btc_dominance"] = btc_dominance
+        if stablecoin_dominance is not None:
+            context["macro_stablecoin_dominance"] = stablecoin_dominance
+        return context
 
     @classmethod
     def _first_number_from_many(

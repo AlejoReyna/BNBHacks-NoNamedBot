@@ -36,6 +36,7 @@ class DecisionLogger:
         estimated_slippage_pct: float | None = None,
         strategy_mode: str | None = None,
         entry_score: float | None = None,
+        entries_blocked_reason: str | None = None,
         exit_reason: str | None = None,
         hold_time_seconds: int | None = None,
         ml_regime: str | None = None,
@@ -68,6 +69,8 @@ class DecisionLogger:
             record["strategy_mode"] = strategy_mode
         if entry_score is not None:
             record["entry_score"] = entry_score
+        if entries_blocked_reason is not None:
+            record["entries_blocked_reason"] = entries_blocked_reason
         if exit_reason is not None:
             record["exit_reason"] = exit_reason
         if hold_time_seconds is not None:
@@ -111,6 +114,7 @@ def log_decision(
     estimated_slippage_pct: float | None = None,
     strategy_mode: str | None = None,
     entry_score: float | None = None,
+    entries_blocked_reason: str | None = None,
     exit_reason: str | None = None,
     hold_time_seconds: int | None = None,
     ml_regime: str | None = None,
@@ -140,6 +144,7 @@ def log_decision(
         estimated_slippage_pct=estimated_slippage_pct,
         strategy_mode=strategy_mode,
         entry_score=entry_score,
+        entries_blocked_reason=entries_blocked_reason,
         exit_reason=exit_reason,
         hold_time_seconds=hold_time_seconds,
         ml_regime=ml_regime,

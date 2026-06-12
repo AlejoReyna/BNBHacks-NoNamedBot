@@ -93,7 +93,7 @@ class PositionManager:
             return None
         if current_price > position.highest_price:
             position.highest_price = current_price
-            raised_stop = current_price * (1 - self.settings.trailing_stop_pct)
+            raised_stop = current_price * (1 - self._active_trailing_stop_pct(position))
             position.trailing_stop_price = max(position.trailing_stop_price, raised_stop)
             self.persist_positions()
         if current_price >= position.take_profit_price:
@@ -101,6 +101,21 @@ class PositionManager:
         if current_price <= position.trailing_stop_price:
             return "trailing_stop"
         return None
+
+    def _active_trailing_stop_pct(self, position: Position) -> float:
+        base_stop = float(getattr(self.settings, "trailing_stop_pct", 0.06))
+        if position.entry_price <= 0:
+            return base_stop
+        unrealized_pct = (position.highest_price - position.entry_price) / position.entry_price
+        step2_profit = float(getattr(self.settings, "trail_step2_profit_pct", 0.12))
+        step2_stop = float(getattr(self.settings, "trail_step2_stop_pct", 0.03))
+        if unrealized_pct >= step2_profit:
+            return min(base_stop, step2_stop)
+        step1_profit = float(getattr(self.settings, "trail_step1_profit_pct", 0.08))
+        step1_stop = float(getattr(self.settings, "trail_step1_stop_pct", 0.04))
+        if unrealized_pct >= step1_profit:
+            return min(base_stop, step1_stop)
+        return base_stop
 
     def close_position(self, symbol: str) -> Position | None:
         """Remove and return an open position if present."""

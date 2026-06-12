@@ -36,7 +36,7 @@ def _engine(
     slippage: float | None = 0.005,
     **kwargs: Any,
 ) -> BreakoutEngine:
-    resolved_settings = settings or Settings()
+    resolved_settings = settings or Settings(max_chase_pct=0.06)
     twak = kwargs.pop("twak", FakeTWAKSlippage(slippage))
     return BreakoutEngine(resolved_settings, twak_interface=twak)  # type: ignore[arg-type]
 
@@ -75,7 +75,7 @@ def _engine_with_price_high(
 
 def _seed_breakout_caches(engine: BreakoutEngine, symbols: list[str]) -> None:
     engine.price_cache.data = {
-        symbol: [{"timestamp": time.time(), "value": 10.0}]
+        symbol: [{"timestamp": time.time(), "value": 10.1}]
         for symbol in symbols
     }
     engine.volume_cache.data = {
@@ -94,7 +94,8 @@ def test_three_actionable_core_factors_enters() -> None:
     assert decision.factor_scores["regime_not_risk_off"] is True
     assert decision.factor_scores["slippage_under_cap"] is True
     assert decision.position_size_usdc == 500.0
-    assert "3/3 core factors passed" in decision.reason
+    assert decision.entry_score is not None and decision.entry_score >= 45.0
+    assert "entry score" in decision.reason
 
 
 def test_missing_rsi_and_derivatives_fail_optional_factors_but_do_not_veto_core_entry() -> None:
@@ -131,8 +132,8 @@ def test_universe_chooses_highest_scoring_target_token() -> None:
     engine.volume_cache.data = {
         "LINK": [{"timestamp": time.time() - 3600, "value": 500_000.0}],
     }
-    engine.price_cache.data["LINK"] = [{"timestamp": time.time(), "value": 9.0}]
-    engine.price_cache.data["CAKE"] = [{"timestamp": time.time(), "value": 10.0}]
+    engine.price_cache.data["LINK"] = [{"timestamp": time.time(), "value": 10.1}]
+    engine.price_cache.data["CAKE"] = [{"timestamp": time.time(), "value": 10.1}]
     snapshot = {
         "NOTREAL": _token(symbol="NOTREAL", volume_24h=999999.0),
         "CAKE": _token(volume_24h=3000.0, market_cap=100_000.0, estimated_slippage_pct=0.02),
@@ -285,11 +286,7 @@ def test_insufficient_core_factors_reports_count() -> None:
     )
 
     assert decision.should_enter is False
-    assert decision.reason in {
-        "slippage estimate missing, negative, or above cap",
-        "insufficient signal: 0/3 core factors passed (need 3)",
-        "insufficient signal: 1/3 core factors passed (need 3)",
-    }
+    assert decision.reason == "entry score 11.2 below quote floor 40.0"
 
 
 def test_eligible_rules_list_contains_149_entries() -> None:
@@ -371,32 +368,75 @@ def test_volume_breakout_derives_hourly_average_from_24h_when_needed() -> None:
     assert failing.factor_scores["volume_breakout"] is False
 
 
-def test_three_hour_breakout_uses_cmc_high_3h_with_buffer_when_present() -> None:
+def test_three_hour_breakout_feeds_score_but_not_six_hour_boolean() -> None:
     engine = _engine()
     engine.price_cache.data = {}
     passing = engine.evaluate_token(_token(price=2.11, high_3h=2.10), 10000.0)
     engine.price_cache.data = {}
     failing = engine.evaluate_token(_token(price=2.104, high_3h=2.10), 10000.0)
 
-    assert passing.factor_scores["six_hour_high_break"] is True
+    assert passing.factor_scores["six_hour_high_break"] is False
+    assert passing.entry_score is not None and passing.entry_score > failing.entry_score
     assert failing.factor_scores["six_hour_high_break"] is False
 
 
-def test_three_hour_breakout_falls_back_to_price_cache_without_high_3h() -> None:
+def test_six_hour_breakout_falls_back_to_price_cache_without_high_6h() -> None:
     engine = _engine_with_price_high("CAKE", 10.0)
     decision = engine.evaluate_token(_token(price=10.03, high_3h=None), 10000.0)
 
     assert decision.factor_scores["six_hour_high_break"] is True
 
 
-def test_three_hour_breakout_ignores_stale_cache_points() -> None:
+def test_six_hour_breakout_ignores_stale_cache_points() -> None:
     engine = _engine()
     engine.price_cache.data = {
-        "CAKE": [{"timestamp": time.time() - (4 * 3600), "value": 10.0}],
+        "CAKE": [{"timestamp": time.time() - (7 * 3600), "value": 10.0}],
     }
     decision = engine.evaluate_token(_token(price=10.5, high_3h=None), 10000.0)
 
     assert decision.factor_scores["six_hour_high_break"] is False
+
+
+def test_default_anti_chase_cap_skips_overextended_breakout() -> None:
+    engine = BreakoutEngine(Settings(), twak_interface=FakeTWAKSlippage(0.005))  # type: ignore[arg-type]
+    engine.price_cache.data = {"CAKE": [{"timestamp": time.time(), "value": 10.0}]}
+    engine.volume_cache.data = {"CAKE": [{"timestamp": time.time() - 3600, "value": 500_000.0}]}
+
+    decision = engine.evaluate_token(_token(price=10.5), 10000.0)
+
+    assert decision.should_enter is False
+    assert decision.entry_score is not None and decision.entry_score >= 45.0
+    assert decision.reason.startswith("anti-chase cap")
+
+
+def test_macro_context_is_persisted_once_per_shared_global_sample() -> None:
+    engine = _engine()
+    _seed_breakout_caches(engine, ["CAKE", "LINK"])
+    now = time.time()
+    engine.macro_cache.data = {
+        "TOTAL_MARKET_CAP": [{"timestamp": now - 3600, "value": 100.0}],
+        "BTC_DOMINANCE": [{"timestamp": now - 3600, "value": 52.0}],
+        "STABLECOIN_DOMINANCE": [{"timestamp": now - 3600, "value": 7.0}],
+    }
+    macro = {
+        "macro_total_market_cap": 110.0,
+        "macro_btc_dominance": 51.0,
+        "macro_stablecoin_dominance": 6.5,
+        "funding_rate": 0.0,
+        "open_interest_change_pct": 0.0,
+    }
+
+    engine.evaluate_all(
+        {
+            "CAKE": _token(symbol="CAKE", **macro),
+            "LINK": _token(symbol="LINK", **macro),
+        },
+        10000.0,
+    )
+
+    assert len(engine.macro_cache.data["TOTAL_MARKET_CAP"]) == 2
+    assert len(engine.macro_cache.data["BTC_DOMINANCE"]) == 2
+    assert len(engine.macro_cache.data["STABLECOIN_DOMINANCE"]) == 2
 
 
 def test_flat_bnb_regime_is_not_risk_off() -> None:
@@ -451,7 +491,7 @@ def test_regime_factor_does_not_count_against_min_entry_factors() -> None:
 
 
 def test_min_entry_factors_three_allows_one_missing_core_when_configured() -> None:
-    settings = Settings(min_entry_factors=3)
+    settings = Settings(min_entry_factors=3, max_chase_pct=0.06)
     engine = _engine_with_price_high("CAKE", 10.0, settings=settings)
     decision = engine.evaluate_token(
         _token(bnb_1h_trend_pct=-5.0, volume_24h=10_000_000.0),

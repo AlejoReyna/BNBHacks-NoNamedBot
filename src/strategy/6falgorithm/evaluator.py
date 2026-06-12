@@ -116,6 +116,7 @@ def evaluate_universe_breakout(
         true_factor_count=candidate.true_factor_count,
         source=candidate.source,
         entry_score=candidate.entry_score,
+        position_size_multiplier=candidate.position_size_multiplier,
         strategy_mode=candidate.strategy_mode,
         ml_context=candidate.ml_context,
         ml_ranking=ml_ranking,

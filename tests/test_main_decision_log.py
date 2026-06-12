@@ -120,6 +120,7 @@ def test_run_agent_logs_guardrail_blocked_cycle(monkeypatch: Any, tmp_path: Path
     assert record["entries_allowed"] is False
     assert record["symbol"] is None
     assert record["reason"] == "daily trade limit reached"
+    assert record["entries_blocked_reason"] == "daily_trade_limit"
 
 
 def test_run_agent_logs_drawdown_halt_cycle(monkeypatch: Any, tmp_path: Path) -> None:
@@ -145,3 +146,4 @@ def test_run_agent_logs_drawdown_halt_cycle(monkeypatch: Any, tmp_path: Path) ->
     assert record["entries_allowed"] is False
     assert record["portfolio_value_usdc"] == 8000.0
     assert record["reason"] == "drawdown kill switch"
+    assert record["entries_blocked_reason"] == "risk_state:kill_switch"
