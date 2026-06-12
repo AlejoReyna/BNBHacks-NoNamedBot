@@ -1,0 +1,170 @@
+name: AWS Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - staging
+      restart_only:
+        description: Skip git pull and dependency install; only restart systemd
+        required: false
+        default: false
+        type: boolean
+      skip_pre_live_check:
+        description: Skip pre_live_check.py after TWAK unlock verification
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aws-deploy-agent-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: ${{ inputs.environment }}
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      SSM_INSTANCE_ID: ${{ vars.AGENT_SSM_INSTANCE_ID }}
+      DEPLOY_USER: ${{ vars.AGENT_DEPLOY_USER || 'ubuntu' }}
+      DEPLOY_PATH: ${{ vars.AGENT_DEPLOY_PATH || '/home/ubuntu/planb-plus' }}
+      SERVICE_NAME: ${{ vars.AGENT_SERVICE_NAME || 'planb-plus' }}
+      HEALTH_URL: ${{ vars.AGENT_HEALTH_URL || 'http://localhost:8080/health' }}
+      RESTART_ONLY: ${{ inputs.restart_only }}
+      SKIP_PRE_LIVE_CHECK: ${{ inputs.skip_pre_live_check }}
+
+    steps:
+      - name: Validate deploy configuration
+        run: |
+          set -euo pipefail
+          test -n "$SSM_INSTANCE_ID" || {
+            echo "Missing GitHub variable AGENT_SSM_INSTANCE_ID"
+            exit 1
+          }
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Send SSM deploy command
+        id: ssm
+        run: |
+          set -euo pipefail
+
+          {
+            echo "set -euo pipefail"
+            printf 'DEPLOY_USER=%q\n' "$DEPLOY_USER"
+            printf 'DEPLOY_PATH=%q\n' "$DEPLOY_PATH"
+            printf 'SERVICE_NAME=%q\n' "$SERVICE_NAME"
+            printf 'HEALTH_URL=%q\n' "$HEALTH_URL"
+            printf 'RESTART_ONLY=%q\n' "$RESTART_ONLY"
+            printf 'SKIP_PRE_LIVE_CHECK=%q\n' "$SKIP_PRE_LIVE_CHECK"
+            cat <<'REMOTE_SCRIPT'
+
+          cat >/tmp/cascade-agent-deploy-user.sh <<'USER_SCRIPT'
+          set -euo pipefail
+
+          cd "$DEPLOY_PATH"
+
+          if [ "$RESTART_ONLY" != "true" ]; then
+            git fetch origin
+            git checkout main
+            git pull --ff-only
+            test -x .venv/bin/python || python3 -m venv .venv
+            . .venv/bin/activate
+            pip install -r requirements.txt -r requirements-ml.txt
+          fi
+
+          . .venv/bin/activate
+          python scripts/verify_twak_unlock.py
+
+          if [ "$SKIP_PRE_LIVE_CHECK" != "true" ]; then
+            python scripts/pre_live_check.py
+          fi
+
+          systemctl --user daemon-reload
+          systemctl --user restart "$SERVICE_NAME"
+
+          for i in $(seq 1 12); do
+            if curl -sf "$HEALTH_URL" >/dev/null; then
+              echo "Health check passed"
+              exit 0
+            fi
+            echo "Waiting for health endpoint (attempt $i/12)..."
+            sleep 5
+          done
+
+          echo "Health check failed after restart"
+          systemctl --user status "$SERVICE_NAME" --no-pager || true
+          journalctl --user -u "$SERVICE_NAME" -n 100 --no-pager || true
+          exit 1
+          USER_SCRIPT
+
+          chmod 755 /tmp/cascade-agent-deploy-user.sh
+          sudo -iu "$DEPLOY_USER" env \
+            DEPLOY_PATH="$DEPLOY_PATH" \
+            SERVICE_NAME="$SERVICE_NAME" \
+            HEALTH_URL="$HEALTH_URL" \
+            RESTART_ONLY="$RESTART_ONLY" \
+            SKIP_PRE_LIVE_CHECK="$SKIP_PRE_LIVE_CHECK" \
+            bash /tmp/cascade-agent-deploy-user.sh
+          REMOTE_SCRIPT
+          } > remote-agent-deploy.sh
+
+          jq -n --rawfile script remote-agent-deploy.sh '{commands: [$script]}' > ssm-parameters.json
+
+          command_id="$(
+            aws ssm send-command \
+              --document-name "AWS-RunShellScript" \
+              --instance-ids "$SSM_INSTANCE_ID" \
+              --comment "Deploy cascade-ai ${GITHUB_SHA}" \
+              --parameters file://ssm-parameters.json \
+              --query "Command.CommandId" \
+              --output text
+          )"
+
+          echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
+          echo "Started SSM command $command_id"
+
+      - name: Wait for SSM command
+        run: |
+          set -euo pipefail
+
+          command_id="${{ steps.ssm.outputs.command_id }}"
+          aws ssm wait command-executed \
+            --command-id "$command_id" \
+            --instance-id "$SSM_INSTANCE_ID" || true
+
+          aws ssm get-command-invocation \
+            --command-id "$command_id" \
+            --instance-id "$SSM_INSTANCE_ID" \
+            --query '{Status:Status,ResponseCode:ResponseCode,Stdout:StandardOutputContent,Stderr:StandardErrorContent}' \
+            --output json > ssm-result.json
+
+          echo "---- remote stdout ----"
+          jq -r '.Stdout // ""' ssm-result.json
+          echo "---- remote stderr ----"
+          jq -r '.Stderr // ""' ssm-result.json >&2
+
+          status="$(jq -r '.Status' ssm-result.json)"
+          response_code="$(jq -r '.ResponseCode' ssm-result.json)"
+
+          if [ "$status" != "Success" ] || [ "$response_code" != "0" ]; then
+            echo "SSM deploy failed with status=$status response_code=$response_code"
+            exit 1
+          fi
