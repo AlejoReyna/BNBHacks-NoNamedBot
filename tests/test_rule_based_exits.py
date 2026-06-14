@@ -210,3 +210,34 @@ def test_window_flatten_disabled_when_unset(tmp_path: Path) -> None:
     assert main_mod._maybe_flatten_for_window(
         settings, _PM(), object(), object(), datetime.now(timezone.utc)
     ) is False
+
+
+# --- 3c. Exit resilience: a reverting swap must not crash the agent ---------
+
+
+def test_failed_exit_swap_does_not_crash(tmp_path: Path, monkeypatch) -> None:
+    """A reverting/failed exit swap must be caught: the position stays open and
+    the agent keeps running, instead of an uncaught RuntimeError crash-looping
+    the process (the dust-ATOM time-stop bug found in production)."""
+    from src import main as main_mod
+
+    settings = _settings(tmp_path)
+    manager = PositionManager(settings)
+    manager.open_position(
+        "ATOM", amount_tokens=0.0528, entry_price=1.985, position_usd=0.10,
+        atr_pct=0.03, regime=MarketRegime.TRENDING_UP,
+    )
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("twak swap failed with exit code 1: execution reverted")
+
+    monkeypatch.setattr(main_mod, "_execute_logged_swap", _boom)
+
+    class _Guardrails:
+        settings = settings
+
+    # Must NOT raise, and the position must remain open for a later retry.
+    main_mod._execute_position_exit(
+        manager, object(), _Guardrails(), "ATOM", 1.95, 100.0, exit_reason="time_stop"
+    )
+    assert manager.get_position("ATOM") is not None

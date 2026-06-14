@@ -2134,16 +2134,30 @@ def _execute_position_exit(
         return
     execution_slippage = _require_execution_slippage(guardrails.settings.max_slippage_pct)
     expected_amount_out = current_price * position.amount_tokens
-    result = _execute_logged_swap(
-        guardrails.settings,
-        router,
-        "exit",
-        symbol,
-        guardrails.settings.default_stable_symbol,
-        position.amount_tokens,
-        execution_slippage,
-        expected_amount_out=expected_amount_out,
-    )
+    try:
+        result = _execute_logged_swap(
+            guardrails.settings,
+            router,
+            "exit",
+            symbol,
+            guardrails.settings.default_stable_symbol,
+            position.amount_tokens,
+            execution_slippage,
+            expected_amount_out=expected_amount_out,
+        )
+    except Exception as exc:
+        # A failed exit swap (e.g. an on-chain revert when trying to sell an
+        # illiquid or dust position) must NOT crash the agent. Log it, leave the
+        # position open, and let the next cycle retry. Without this guard a
+        # single reverting swap takes the whole process down and systemd
+        # crash-loops it.
+        LOGGER.error(
+            "Exit swap for %s (%s) failed: %s; position left open, will retry next cycle",
+            symbol,
+            exit_reason,
+            exc,
+        )
+        return
     if not _execution_has_tx_hash(result):
         LOGGER.error("Exit swap for %s returned no tx hash; local position remains open", symbol)
         return
