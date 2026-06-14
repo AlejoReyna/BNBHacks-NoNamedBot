@@ -1134,6 +1134,8 @@ def _entries_blocked_reason(
             return "scalping_guardrails"
     daily_count = int(getattr(guardrails, "_daily_trade_count", 0))
     if daily_count >= risk_decision.max_daily_trades:
+        if risk_decision.state == RiskState.REDUCED_RISK:
+            return "reduced_risk_daily_trade_limit"
         return "daily_trade_limit"
     return None
 
