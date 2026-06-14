@@ -295,7 +295,7 @@ def run_live_preflight(settings: Settings) -> bool:
         _mask_address(configured_wallet) if configured_wallet else "missing",
     )
 
-    twak_interface = TWAKInterface(paper_trade=False)
+    twak_interface = _twak_interface_from_settings(settings, paper_trade=False)
     try:
         wallet_payload = twak_interface.wallet_address("bsc")
         twak_wallet = _extract_wallet_address(wallet_payload)
@@ -455,6 +455,18 @@ def _print_preflight_report(checks: list[PreflightCheck]) -> None:
     print(f"Preflight result: {'PASS' if passed else 'FAIL'}")
 
 
+def _twak_interface_from_settings(settings: Settings, paper_trade: bool) -> Any:
+    """Build TWAK interface and apply live swap retry settings."""
+
+    twak_interface = TWAKInterface(paper_trade=paper_trade)
+    try:
+        twak_interface.approval_retry_max = settings.swap_approval_retry_max
+        twak_interface.approval_retry_delay_seconds = settings.swap_approval_retry_delay_seconds
+    except AttributeError:
+        pass
+    return twak_interface
+
+
 def run_agent(settings: Settings, max_cycles: int | None = None) -> None:
     """Run the v2.5 live/paper trading loop."""
 
@@ -462,7 +474,7 @@ def run_agent(settings: Settings, max_cycles: int | None = None) -> None:
     Path("logs").mkdir(parents=True, exist_ok=True)
     cmc_client = CMCMCPClient(settings)
     toolkit = BnbToolkitWrapper(settings)
-    twak_interface = TWAKInterface(paper_trade=settings.paper_trade)
+    twak_interface = _twak_interface_from_settings(settings, paper_trade=settings.paper_trade)
     router = PancakeSwapRouter(twak_interface)
     price_cache = PriceCache(maxlen=getattr(settings, "price_cache_maxlen", 2880) or 2880)
     sentiment = SentimentTier1(
@@ -2792,7 +2804,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.emergency_liquidate:
         toolkit = BnbToolkitWrapper(settings)
-        twak_interface = TWAKInterface(paper_trade=settings.paper_trade)
+        twak_interface = _twak_interface_from_settings(settings, paper_trade=settings.paper_trade)
         router = PancakeSwapRouter(twak_interface)
         position_manager = PositionManager(settings)
         guardrails = Guardrails(settings)

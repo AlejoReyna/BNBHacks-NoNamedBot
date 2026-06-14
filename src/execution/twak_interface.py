@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -33,11 +34,26 @@ class TWAKResult:
     stderr: str
 
 
+class TWAKCommandError(RuntimeError):
+    """TWAK command failure with the captured subprocess result."""
+
+    def __init__(self, message: str, result: TWAKResult) -> None:
+        super().__init__(message)
+        self.result = result
+
+
 class TWAKInterface:
     """Secure wrapper around documented TWAK commands."""
 
-    def __init__(self, paper_trade: bool = False) -> None:
+    def __init__(
+        self,
+        paper_trade: bool = False,
+        approval_retry_max: int = 3,
+        approval_retry_delay_seconds: float = 7.0,
+    ) -> None:
         self.paper_trade = paper_trade
+        self.approval_retry_max = max(0, int(approval_retry_max))
+        self.approval_retry_delay_seconds = max(0.0, float(approval_retry_delay_seconds))
 
     def get_quote(
         self,
@@ -240,20 +256,19 @@ class TWAKInterface:
                 "tx_hash": f"paper-twak-swap-{from_symbol.upper()}-{to_symbol.upper()}",
             }
 
-        result = self._run(
-            [
-                "twak",
-                "swap",
-                str(amount),
-                resolve_twak_token(from_symbol),
-                resolve_twak_token(to_symbol),
-                "--slippage",
-                self._fraction_to_cli_percent(slippage_pct),
-                "--chain",
-                "bsc",
-                "--json",
-            ]
-        )
+        command = [
+            "twak",
+            "swap",
+            str(amount),
+            resolve_twak_token(from_symbol),
+            resolve_twak_token(to_symbol),
+            "--slippage",
+            self._fraction_to_cli_percent(slippage_pct),
+            "--chain",
+            "bsc",
+            "--json",
+        ]
+        result = self._run_swap_with_approval_retry(command)
         return self._swap_payload_from_result(result)
 
     def quote_swap(
@@ -326,8 +341,50 @@ class TWAKInterface:
                 parts.append(f"stdout: {result.stdout}")
             message = " | ".join(parts) if parts else "<no output>"
 
-            raise RuntimeError(f"{command_name} failed with exit code {result.returncode}: {message}")
+            raise TWAKCommandError(
+                f"{command_name} failed with exit code {result.returncode}: {message}",
+                result,
+            )
         return result
+
+    def _run_swap_with_approval_retry(self, command: list[str]) -> TWAKResult:
+        retries = 0
+        while True:
+            try:
+                return self._run(command)
+            except TWAKCommandError as exc:
+                if not self._is_approval_race_failure(exc.result):
+                    raise
+                if retries >= self.approval_retry_max:
+                    LOGGER.error(
+                        "TWAK swap approval race did not clear after %s retries",
+                        self.approval_retry_max,
+                    )
+                    raise
+
+                retries += 1
+                delay_seconds = self.approval_retry_delay_seconds
+                LOGGER.warning(
+                    "TWAK swap approval is pending; retrying after %.1fs (retry %s/%s)",
+                    delay_seconds,
+                    retries,
+                    self.approval_retry_max,
+                )
+                if delay_seconds > 0:
+                    time.sleep(delay_seconds)
+
+    @staticmethod
+    def _is_approval_race_failure(result: TWAKResult) -> bool:
+        decoded, _ = TWAKInterface._decode_swap_stdout(result.stdout)
+        if isinstance(decoded, dict) and decoded.get("errorCode") == "APPROVAL_SENT_SWAP_FAILED":
+            return True
+
+        combined = f"{result.stdout}\n{result.stderr}".lower()
+        if "approval_sent_swap_failed" in combined:
+            return True
+        return "approval was sent" in combined and (
+            "0xf4059071" in combined or "check allowance" in combined
+        )
 
     @staticmethod
     def _amount_to_atomic_units(amount: float, asset: str) -> str:

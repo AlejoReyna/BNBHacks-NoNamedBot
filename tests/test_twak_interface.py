@@ -166,10 +166,123 @@ def test_paper_swap_does_not_broadcast(monkeypatch: Any) -> None:
 
     monkeypatch.setattr("subprocess.run", fail_run)
 
-    result = TWAKInterface(paper_trade=True).swap("USDC", "CAKE", 100.0, 0.01)
+    result = TWAKInterface(
+        paper_trade=True,
+        approval_retry_max=0,
+        approval_retry_delay_seconds=0.0,
+    ).swap("USDC", "CAKE", 100.0, 0.01)
 
     assert result["mode"] == "paper"
     assert result["tool"] == "twak-swap"
+
+
+def test_swap_retries_approval_race_and_returns_success(monkeypatch: Any) -> None:
+    calls: list[list[str]] = []
+    sleeps: list[float] = []
+    approval_hash = "0x" + "a" * 64
+    swap_hash = "0x" + "b" * 64
+
+    def fake_run(command: list[str], **kwargs: object) -> object:
+        calls.append(command)
+        if len(calls) == 1:
+            return type(
+                "Completed",
+                (),
+                {
+                    "returncode": 1,
+                    "stdout": (
+                        '{'
+                        '"error":"execution reverted: 0xf4059071. Approval was sent '
+                        f'(tx: {approval_hash}). Check allowance before retrying.",'
+                        '"errorCode":"APPROVAL_SENT_SWAP_FAILED"'
+                        '}'
+                    ),
+                    "stderr": f"Sending token approval...\nApproval tx: https://bscscan.com/tx/{approval_hash}",
+                },
+            )()
+        return type(
+            "Completed",
+            (),
+            {
+                "returncode": 0,
+                "stdout": f'{{"hash":"{swap_hash}","amount_out":290.69}}',
+                "stderr": "",
+            },
+        )()
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr("src.execution.twak_interface.time.sleep", lambda seconds: sleeps.append(seconds))
+
+    result = TWAKInterface(
+        approval_retry_max=2,
+        approval_retry_delay_seconds=0.25,
+    ).swap("CAKE", "USDC", 231.48, 0.005)
+
+    assert result["tx_hash"] == swap_hash
+    assert result["amount_out"] == 290.69
+    assert len(calls) == 2
+    assert sleeps == [0.25]
+
+
+def test_swap_does_not_retry_non_recoverable_failure(monkeypatch: Any) -> None:
+    calls: list[list[str]] = []
+    sleeps: list[float] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> object:
+        calls.append(command)
+        return type(
+            "Completed",
+            (),
+            {
+                "returncode": 1,
+                "stdout": '{"error":"execution reverted: insufficient liquidity","errorCode":"SWAP_FAILED"}',
+                "stderr": "",
+            },
+        )()
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr("src.execution.twak_interface.time.sleep", lambda seconds: sleeps.append(seconds))
+
+    with pytest.raises(RuntimeError, match="insufficient liquidity"):
+        TWAKInterface(
+            approval_retry_max=2,
+            approval_retry_delay_seconds=0.25,
+        ).swap("CAKE", "USDC", 231.48, 0.005)
+
+    assert len(calls) == 1
+    assert sleeps == []
+
+
+def test_swap_approval_retry_limit_and_backoff(monkeypatch: Any) -> None:
+    calls: list[list[str]] = []
+    sleeps: list[float] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> object:
+        calls.append(command)
+        return type(
+            "Completed",
+            (),
+            {
+                "returncode": 1,
+                "stdout": (
+                    '{"error":"execution reverted: 0xf4059071. Approval was sent. '
+                    'Check allowance before retrying.","errorCode":"APPROVAL_SENT_SWAP_FAILED"}'
+                ),
+                "stderr": "",
+            },
+        )()
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr("src.execution.twak_interface.time.sleep", lambda seconds: sleeps.append(seconds))
+
+    with pytest.raises(RuntimeError, match="APPROVAL_SENT_SWAP_FAILED"):
+        TWAKInterface(
+            approval_retry_max=2,
+            approval_retry_delay_seconds=0.5,
+        ).swap("CAKE", "USDC", 231.48, 0.005)
+
+    assert len(calls) == 3
+    assert sleeps == [0.5, 0.5]
 
 
 def test_request_x402_uses_twak_native_request(monkeypatch: Any) -> None:

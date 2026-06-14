@@ -56,6 +56,8 @@ class Settings(BaseModel):
     max_daily_trades: int = 3
     max_daily_loss_pct: float = 0.03
     max_slippage_pct: float = 0.01
+    swap_approval_retry_max: int = Field(default=3, ge=0)
+    swap_approval_retry_delay_seconds: float = Field(default=7.0, ge=0.0)
     drawdown_soft_stop_pct: float = 0.10
     drawdown_kill_switch_pct: float = 0.18
     trailing_stop_pct: float = 0.06
@@ -263,6 +265,8 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "max_daily_trades": _get_int("MAX_DAILY_TRADES", 3),
         "max_daily_loss_pct": _get_float("MAX_DAILY_LOSS_PCT", 0.03),
         "max_slippage_pct": _get_float("MAX_SLIPPAGE_PCT", 0.01),
+        "swap_approval_retry_max": _get_int("SWAP_APPROVAL_RETRY_MAX", 3),
+        "swap_approval_retry_delay_seconds": _get_float("SWAP_APPROVAL_RETRY_DELAY_SECONDS", 7.0),
         "drawdown_soft_stop_pct": _get_float("DRAWDOWN_SOFT_STOP_PCT", 0.10),
         "drawdown_kill_switch_pct": _get_float("DRAWDOWN_KILL_SWITCH_PCT", 0.18),
         "trailing_stop_pct": _get_float("TRAILING_STOP_PCT", 0.06),
