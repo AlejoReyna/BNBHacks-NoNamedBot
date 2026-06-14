@@ -2675,19 +2675,18 @@ def _ensure_daily_minimum_trade(
         LOGGER.error("Compliance minimum trade refused because BNB would be used as a leg")
         return False
     # RWEAL: never route the fixed compliance swap into a token facing a
-    # scheduled event. COMPLIANCE_TO_SYMBOL is hardcoded, so without this guard a
-    # blacked-out counter (e.g. TWT) would be bought directly into the event.
-    # Skipping is the conservative choice; the operator is warned to pick an
-    # unaffected COMPLIANCE_TO_SYMBOL if disqualification risk is a concern.
-    if event_filter is not None:
-        _blocked = event_filter.symbol_blackout(counter, now_utc)
-        if _blocked:
-            LOGGER.warning(
-                "Skipping fixed compliance swap: counter %s blacked out (%s)",
-                counter,
-                _blocked,
-            )
-            return False
+    # SYMBOL-SPECIFIC scheduled event. COMPLIANCE_TO_SYMBOL is hardcoded, so
+    # without this guard a blacked-out counter (e.g. TWT) would be bought
+    # directly into the event. Use active_symbol_blackouts (which EXCLUDES
+    # GLOBAL/macro) so the differentiate policy holds: a GLOBAL macro blackout
+    # still lets the tiny compliance swap fire (avoid DQ); only a per-symbol
+    # event on the counter blocks it. Manual halt is handled by the callers.
+    if event_filter is not None and counter in event_filter.active_symbol_blackouts(now_utc):
+        LOGGER.warning(
+            "Skipping fixed compliance swap: counter %s in a symbol-specific event blackout",
+            counter,
+        )
+        return False
     if twak_interface is not None and liquidity_analyzer is not None:
         try:
             slippage_normal = twak_interface.estimate_slippage_pct(amount_in, stable, counter)
