@@ -12,8 +12,8 @@ from scripts import pre_live_check
 def _mock_settings(monkeypatch) -> MagicMock:
     settings = MagicMock()
     settings.wallet_address = "0x7CE28f5d2D1B2eFd8f87FF0a7fdC7D2EaB465c9c"
-    settings.min_bnb_gas = 0.05
-    settings.min_usdc_balance = 50.0
+    settings.min_bnb_gas = 0.003
+    settings.min_usdc_balance = 20.0
     monkeypatch.setattr(pre_live_check, "load_settings", lambda: settings)
     monkeypatch.setattr(pre_live_check, "assert_tradable_subset_of_eligible", lambda: None)
     monkeypatch.setattr(
