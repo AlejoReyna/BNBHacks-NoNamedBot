@@ -145,8 +145,8 @@ class Settings(BaseModel):
     log_rotate_max_mb: float = 50.0
     cmc_collector_enabled: bool = True
     cmc_collector_interval_min: int = 15
-    min_bnb_gas: float = 0.05
-    min_usdc_balance: float = 50.0
+    min_bnb_gas: float = 0.003
+    min_usdc_balance: float = 20.0
     disk_guard_min_free_bytes: int = 500_000_000
     # RWEAL Phase 1 (Real-World Event Awareness Layer): static, entry-only
     # event gate. Disabled by default -> zero behaviour change. See
@@ -356,8 +356,8 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "log_rotate_max_mb": _get_float("LOG_ROTATE_MAX_MB", 50.0),
         "cmc_collector_enabled": _get_bool("CMC_COLLECTOR_ENABLED", True),
         "cmc_collector_interval_min": _get_int("CMC_COLLECTOR_INTERVAL_MIN", 15),
-        "min_bnb_gas": _get_float("MIN_BNB_GAS", 0.05),
-        "min_usdc_balance": _get_float("MIN_USDC_BALANCE", 50.0),
+        "min_bnb_gas": _get_float("MIN_BNB_GAS", 0.003),
+        "min_usdc_balance": _get_float("MIN_USDC_BALANCE", 20.0),
         "disk_guard_min_free_bytes": _get_int("DISK_GUARD_MIN_FREE_BYTES", 500_000_000),
         "enable_rweal": _get_bool("ENABLE_RWEAL", False),
         "rweal_events_path": os.getenv("RWEAL_EVENTS_PATH", "events.json"),
