@@ -47,12 +47,6 @@ class Settings(BaseModel):
     # factor fails closed on every token. Roughly doubles x402 calls per
     # enrichment batch; still governor-gated. Set false to disable.
     x402_fetch_technicals: bool = True
-    # Technicals (RSI/MACD) come from a SINGLE-asset x402 tool, so they cost one
-    # paid call per symbol (not one per batch). Cap how many of the enriched
-    # symbols get a technicals call per refresh so this stays inside the daily
-    # x402 budget; symbols are taken in priority order (highest cheap-rank
-    # first). 0 = no cap (will fetch technicals for every enriched symbol).
-    x402_technicals_max_symbols: int = 15
     use_keyless_primary: bool = False
     use_dual_market_data: bool = False
     cmc_keyless_base_url: str = "https://pro-api.coinmarketcap.com/trial-pro-api/v3"
@@ -275,7 +269,6 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "x402_hot_refresh_age_seconds": _get_int("X402_HOT_REFRESH_AGE_SECONDS", 600),
         "x402_enrich_top_n": _get_int("X402_ENRICH_TOP_N", 50),
         "x402_fetch_technicals": _get_bool("X402_FETCH_TECHNICALS", True),
-        "x402_technicals_max_symbols": _get_int("X402_TECHNICALS_MAX_SYMBOLS", 15),
         "use_keyless_primary": use_keyless_primary,
         "use_dual_market_data": use_dual_market_data,
         "cmc_keyless_base_url": os.getenv(

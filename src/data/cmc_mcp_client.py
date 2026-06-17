@@ -508,24 +508,12 @@ class CMCMCPClient:
         if not resolved:
             return {}
 
-        # get_crypto_technical_analysis is a SINGLE-asset tool: it rejects
-        # comma-joined ids ("error: id is not number"), so each symbol needs its
-        # own paid call. That makes technicals cost one x402 call per symbol, so
-        # cap how many we fetch per refresh to stay inside the daily budget;
-        # take symbols in the order given (highest priority first). The spend
-        # governor inside _call_tool_x402 is the hard backstop — once the budget
-        # is exhausted it returns {} and we simply stop populating technicals.
-        limit = max(0, int(getattr(self.settings, "x402_technicals_max_symbols", 0) or 0))
-        ordered = list(resolved.items())
-        if limit:
-            ordered = ordered[:limit]
+        def _fetch_batch(batch: list[str]) -> dict[str, Any]:
+            ids = list(dict.fromkeys(resolved[s] for s in batch))
+            return self._call_tool_x402("get_crypto_technical_analysis", {"id": ",".join(ids)})
 
-        by_symbol: dict[str, dict[str, Any]] = {}
-        for symbol, cmc_id in ordered:
-            blob = self._call_tool_x402("get_crypto_technical_analysis", {"id": str(cmc_id)})
-            if isinstance(blob, dict) and blob:
-                by_symbol[symbol] = blob
-        return by_symbol
+        payload = self._fetch_combined_payload(list(resolved), _fetch_batch)
+        return self._by_symbol(payload)
 
     def _build_enriched_snapshot(
         self,
