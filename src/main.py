@@ -2029,26 +2029,39 @@ def _ensure_bnb_reference(snapshot: dict[str, dict[str, Any]], cmc_client: CMCMC
         payload = cmc_client._fetch_keyless(
             "get_crypto_quotes_latest", {"id": "1839"}  # id-only: ticker lookups can hit knockoffs
         )
-        # Keyless quotes nest price/percent_change under quote.USD; flatten to the
-        # top level (same as the paid path) so the field reads below resolve.
-        # Without this every BNB field is None, the regime detector scores 0.0,
-        # and the bot is stuck in permanent risk_off and never enters.
-        payload = cmc_client._normalize_keyless_quotes_payload(payload)
-        by_symbol = cmc_client._by_symbol(payload)
-        bnb = by_symbol.get("BNB")
+        bnb = cmc_client._by_symbol(payload).get("BNB")
         if isinstance(bnb, dict):
-            volume_24h = _maybe_number(bnb.get("volume_24h"))
+            # The keyless trial API returns `quote` as a LIST of per-currency
+            # objects ([{"symbol":"USD","price":...,"percent_change_1h":...}]),
+            # not a {"USD": {...}} dict. Pull the USD entry explicitly. Reading
+            # the flat fields without this leaves every value None, the regime
+            # detector scores 0.0, and the bot is stuck risk_off and never enters.
+            quote = bnb.get("quote")
+            usd: dict[str, Any] = {}
+            if isinstance(quote, dict):
+                usd = quote.get("USD") or {}
+            elif isinstance(quote, list):
+                usd = next(
+                    (q for q in quote if isinstance(q, dict) and str(q.get("symbol", "")).upper() == "USD"),
+                    {},
+                )
+
+            def _q(key: str) -> Any:
+                value = usd.get(key)
+                return value if value is not None else bnb.get(key)
+
+            volume_24h = _maybe_number(_q("volume_24h"))
             snapshot["BNB"] = {
                 "symbol": "BNB",
-                "price": _maybe_number(bnb.get("price")),
-                "market_cap": _maybe_number(bnb.get("market_cap")),
+                "price": _maybe_number(_q("price")),
+                "market_cap": _maybe_number(_q("market_cap")),
                 "volume_24h": volume_24h,
                 "rolling_24h_hourly_volume_avg": volume_24h / 24 if volume_24h else None,
-                "percent_change_1h": _maybe_number(bnb.get("percent_change_1h")),
-                "percent_change_6h": _maybe_number(bnb.get("percent_change_6h")),
-                "percent_change_24h": _maybe_number(bnb.get("percent_change_24h")),
-                "high_24h": _maybe_number(bnb.get("high_24h")),
-                "low_24h": _maybe_number(bnb.get("low_24h")),
+                "percent_change_1h": _maybe_number(_q("percent_change_1h")),
+                "percent_change_6h": _maybe_number(_q("percent_change_6h")),
+                "percent_change_24h": _maybe_number(_q("percent_change_24h")),
+                "high_24h": _maybe_number(_q("high_24h")),
+                "low_24h": _maybe_number(_q("low_24h")),
             }
     except Exception as exc:
         LOGGER.warning("Could not fetch BNB reference snapshot: %s", exc)
