@@ -405,12 +405,14 @@ class CMCMCPClient:
             normalized_symbols,
             self._fetch_keyless_market_metrics_batch,
         )
+        fear_greed = self._fetch_keyless_fear_greed()
         return self._build_enriched_snapshot(
             normalized_symbols,
             quotes,
             technicals,
             market_metrics,
             derivatives,
+            fear_greed_index=fear_greed,
         )
 
     def _fetch_keyless_quotes_batch(self, symbols: list[str]) -> dict[str, Any]:
@@ -418,6 +420,42 @@ class CMCMCPClient:
 
     def _fetch_keyless_market_metrics_batch(self, symbols: list[str]) -> dict[str, Any]:
         return self._fetch_keyless_id_preferred("get_crypto_market_metrics", symbols)
+
+    def _fetch_keyless_fear_greed(self) -> float | None:
+        """Fetch Fear & Greed index from the keyless CMC trial endpoint."""
+        try:
+            headers = {"Accept": "application/json"}
+            if self.settings.cmc_api_key:
+                headers["X-CMC_PRO_API_KEY"] = self.settings.cmc_api_key
+            response = requests.get(
+                f"{self.settings.cmc_keyless_base_url}/fear-and-greed/latest",
+                headers=headers,
+                timeout=15,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            LOGGER.warning("CMC Keyless fear-and-greed fetch failed: %s", exc)
+            return None
+        if not isinstance(payload, dict):
+            return None
+        data = payload.get("data")
+        if isinstance(data, list) and data:
+            latest = data[0]
+        elif isinstance(data, dict):
+            latest = data
+        else:
+            return None
+        if not isinstance(latest, dict):
+            return None
+        val = latest.get("value")
+        if val is None:
+            return None
+        try:
+            value = float(val)
+        except (TypeError, ValueError):
+            return None
+        return value / 100.0 if value > 1.0 else value
 
     def _fetch_keyless_id_preferred(self, tool_name: str, symbols: list[str]) -> dict[str, Any]:
         """Fetch keyless quotes by CMC id when pinned, by ticker otherwise.

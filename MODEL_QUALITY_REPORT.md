@@ -1,9 +1,9 @@
 # Model Quality Report
 
-Generated: 2026-06-17T22:57:00.539235+00:00
+Generated: 2026-06-17T23:24:04.153415+00:00
 
 ## Summary
-- Positive class rate: **25.3%**
+- Positive class rate: **22.6%**
 - Feature count: **41**
 - Best model: **lgb**
 - Recommendation: **KEEP shadow/regime-only fallback — worst-fold AUC below 0.65; ML ranking disabled.**
@@ -12,20 +12,20 @@ Generated: 2026-06-17T22:57:00.539235+00:00
 
 | Model | Mean AUC | Std | Worst-fold AUC | Folds |
 |-------|----------|-----|----------------|-------|
-| lgb | 0.5564 | 0.0504 | 0.4788 | 0.605, 0.587, 0.514, 0.479, 0.597 |
+| lgb | 0.5794 | 0.0459 | 0.5194 | 0.583, 0.536, 0.519, 0.637, 0.621 |
 
 ## Best model feature importance (top 10)
 
-- `hour_of_day`: 3631.0000
-- `volatility_48`: 2647.0000
-- `day_of_week`: 2109.0000
-- `range_compression_6h`: 1836.0000
-- `volume_price_divergence`: 1646.0000
-- `ema_8_21_spread`: 1622.0000
-- `atr_pct_14`: 1533.0000
-- `volatility_16`: 1519.0000
-- `volume_skew_3h_6h`: 1484.0000
-- `rsi_14`: 1143.0000
+- `volatility_48`: 1981.0000
+- `range_compression_6h`: 1420.0000
+- `volatility_16`: 1335.0000
+- `bnb_corr_48`: 1332.0000
+- `volume_price_divergence`: 1280.0000
+- `bnb_beta_48`: 1247.0000
+- `hour_of_day`: 1229.0000
+- `ema_8_21_spread`: 1167.0000
+- `atr_pct_14`: 1138.0000
+- `volume_skew_3h_6h`: 1105.0000
 
 ## Shadow mode recommendation
 
