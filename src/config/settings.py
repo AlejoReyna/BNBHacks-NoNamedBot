@@ -157,6 +157,8 @@ class Settings(BaseModel):
     # Entry/exit outcome log: entry factors + realized PnL, joinable by symbol
     # to learn which factor combinations actually win. Append-only, best-effort.
     trade_outcome_log_path: str = "logs/trade_outcomes.jsonl"
+    # Verified-sell audit log written after the on-chain balance check passes.
+    sell_history_log_path: str = "logs/sell_history.jsonl"
     strategy_mode: Literal["breakout", "scalping"] = "breakout"
     scalping_entry_score_min: float = 60.0
     scalping_position_pct: float = 0.01
@@ -405,6 +407,7 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "factor_matrix_log_enabled": _get_bool("FACTOR_MATRIX_LOG_ENABLED", False),
         "factor_matrix_log_path": os.getenv("FACTOR_MATRIX_LOG_PATH", "logs/factor_matrix.jsonl"),
         "trade_outcome_log_path": os.getenv("TRADE_OUTCOME_LOG_PATH", "logs/trade_outcomes.jsonl"),
+        "sell_history_log_path": os.getenv("SELL_HISTORY_LOG_PATH", "logs/sell_history.jsonl"),
         "strategy_mode": os.getenv("STRATEGY_MODE", "breakout"),
         "scalping_entry_score_min": _get_float("SCALPING_ENTRY_SCORE_MIN", 60.0),
         "scalping_position_pct": _get_float("SCALPING_POSITION_PCT", 0.01),
