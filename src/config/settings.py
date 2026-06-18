@@ -456,6 +456,9 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "rweal_blackout_horizon_hours": _get_float("RWEAL_BLACKOUT_HORIZON_HOURS", 6.0),
         "rweal_post_event_minutes": _get_int("RWEAL_POST_EVENT_MINUTES", 60),
     }
+    # Alias deprecated min_entry_factors into breakout_min_true_factor_count so
+    # the engine actually respects the setting.
+    values["breakout_min_true_factor_count"] = values.get("min_entry_factors", values.get("breakout_min_true_factor_count", 3))
     mode = str(values.get("strategy_mode", "breakout")).strip().lower()
     if mode not in {"breakout", "scalping"}:
         mode = "breakout"

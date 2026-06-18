@@ -83,6 +83,7 @@ class _CheapCandidate:
     open_interest_change: float | None = None
     price: float | None = None
     last_reference_high: float | None = None
+    derivatives_score: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -93,7 +94,7 @@ class _BreakoutProfile:
     chase_cap_exceeded: bool
 
 
-MAX_UNIVERSE_TWAK_QUOTES = 2
+MAX_UNIVERSE_TWAK_QUOTES = 4  # was 2
 
 
 class LocalCache:
@@ -184,6 +185,7 @@ class BreakoutEngine:
         self.macro_cache = LocalCache("macro_cache.json")
         self._macro_context_results: dict[tuple[float | None, float | None, float | None], tuple[float, float]] = {}
         self._missing_factor_warnings: set[tuple[str, str]] = set()
+        self._last_momentum_z_scores: dict[str, float] = {}
 
     def evaluate_token(
         self,
@@ -242,7 +244,8 @@ class BreakoutEngine:
                 token_sentiment = self.sentiment_tier1.get_token_sentiment(candidate.symbol)
             except Exception:
                 token_sentiment = {}
-        entry_score = self._entry_score(candidate, momentum_z_score=0.0, token_sentiment=token_sentiment)
+        cached_z = self._last_momentum_z_scores.get(candidate.symbol, 0.0)
+        entry_score = self._entry_score(candidate, momentum_z_score=cached_z, token_sentiment=token_sentiment)
         estimated_slippage: float | None = None
         quote_state = "not_quoted"
         if self._should_quote_candidate(candidate, entry_score):
@@ -298,8 +301,10 @@ class BreakoutEngine:
             else:
                 self._warn_missing_factor_once(symbol, "derivatives_risk_clear")
                 derivatives_risk_clear = False
+            derivatives_score = 0.5
         else:
             derivatives_risk_clear = not (abs(funding_rate) > 0.0015 or open_interest_change < -10.0)
+            derivatives_score = 1.0 if derivatives_risk_clear else 0.0
 
         six_hour_high_break = breakout_profile.six_hour_high_break
         cheap_core_pass_count = sum(
@@ -342,6 +347,7 @@ class BreakoutEngine:
             open_interest_change=open_interest_change,
             price=price,
             last_reference_high=breakout_profile.broken_reference_high,
+            derivatives_score=derivatives_score,
         )
 
     def _estimate_candidate_slippage(self, candidate: _CheapCandidate) -> tuple[float | None, str]:
@@ -663,6 +669,7 @@ class BreakoutEngine:
                 best_volume = candidate.volume_24h
 
         momentum_scores = self._momentum_z_scores(candidates)
+        self._last_momentum_z_scores = momentum_scores
         scores_by_symbol = {
             candidate.symbol: self._entry_score(
                 candidate,
@@ -752,8 +759,7 @@ class BreakoutEngine:
     @property
     def _quote_score_floor(self) -> float:
         threshold = float(getattr(self.settings, "breakout_entry_score_min", 45.0))
-        buffer = max(0.0, float(getattr(self.settings, "breakout_quote_score_buffer", 5.0)))
-        return max(0.0, threshold - buffer)
+        return max(0.0, threshold + 3.0)
 
     def _should_quote_candidate(self, candidate: _CheapCandidate, entry_score: float) -> bool:
         return not candidate.chase_cap_exceeded and entry_score >= self._quote_score_floor
@@ -764,7 +770,7 @@ class BreakoutEngine:
         score += self._score_weight("volume") * self._clamp01(candidate.volume_surge_score)
         score += self._score_weight("momentum") * self._momentum_component(momentum_z_score)
         score += self._score_weight("rsi") * (1.0 if candidate.rsi_in_range else 0.0)
-        score += self._score_weight("derivatives") * (1.0 if candidate.derivatives_risk_clear else 0.0)
+        score += self._score_weight("derivatives") * candidate.derivatives_score
         score += self._score_weight("macro") * self._clamp01(candidate.macro_score)
         # Token-specific sentiment modifiers (CMC MCP news + narratives)
         if token_sentiment:

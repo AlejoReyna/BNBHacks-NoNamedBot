@@ -256,7 +256,7 @@ def test_universe_quotes_only_best_ranked_candidate_when_it_enters() -> None:
     # evaluate_all quotes up to MAX_UNIVERSE_TWAK_QUOTES candidates (best
     # first) and returns all slippage-confirmed passers, best first.
     assert twak.calls[0] == (500.0, "USDC", "LINK")
-    assert len(twak.calls) <= 2
+    assert len(twak.calls) <= 4
 
 
 def test_universe_quotes_runner_up_only_when_best_slippage_fails() -> None:
@@ -274,7 +274,7 @@ def test_universe_quotes_runner_up_only_when_best_slippage_fails() -> None:
     assert decision.symbol == "CAKE"
     assert decision.should_enter is True
     assert decision.estimated_slippage_pct == 0.005
-    assert twak.calls == [(500.0, "USDC", "LINK"), (500.0, "USDC", "CAKE")]
+    assert twak.calls == [(500.0, "USDC", "LINK"), (500.0, "USDC", "CAKE"), (500.0, "USDC", "AAVE")]
 
 
 def test_missing_or_zero_data_fails_closed() -> None:
@@ -404,7 +404,7 @@ def test_insufficient_core_factors_reports_count() -> None:
     )
 
     assert decision.should_enter is False
-    assert decision.reason == "entry score 11.2 below quote floor 40.0"
+    assert decision.reason == "entry score 11.2 below quote floor 48.0"
 
 
 def test_eligible_rules_list_contains_149_entries() -> None:
