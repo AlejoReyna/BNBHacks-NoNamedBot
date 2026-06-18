@@ -1,0 +1,14 @@
+{
+  "version": "entry_quality_v1",
+  "trained_at": "2026-06-18T17:12:46.465402+00:00",
+  "metrics": {
+    "mean_auc": 0.663514882819611,
+    "mean_accuracy": 0.7735042735042734,
+    "rule_pnl_usdc": 0.0,
+    "model_pnl_usdc": 0.0,
+    "pnl_delta_usdc": 0.0,
+    "selected_trades": 570.0,
+    "training_rows": 8424.0
+  },
+  "feature_count": 41
+}
