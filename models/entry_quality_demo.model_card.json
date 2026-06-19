@@ -1,0 +1,93 @@
+{
+  "all_evaluations": {
+    "lgb": {
+      "folds": 3,
+      "mean_accuracy": 0.7735042735042734,
+      "mean_auc": 0.663514882819611,
+      "model_name": "LGBMClassifier",
+      "model_pnl_usdc": 0.0,
+      "rule_pnl_usdc": 0.0,
+      "selected_trades": 570
+    },
+    "logreg": {
+      "folds": 3,
+      "mean_accuracy": 0.6460905349794239,
+      "mean_auc": 0.5675541732697273,
+      "model_name": "Pipeline",
+      "model_pnl_usdc": 0.0,
+      "rule_pnl_usdc": 0.0,
+      "selected_trades": 1821
+    }
+  },
+  "features": [
+    "ret_1",
+    "ret_4",
+    "ret_16",
+    "volatility_16",
+    "volatility_48",
+    "volume_zscore_24",
+    "volume_ratio_4_24",
+    "rsi_14",
+    "rsi_slope_4",
+    "hl_range_pct",
+    "body_pct",
+    "upper_wick_ratio",
+    "close_vs_high_16",
+    "ema_8_21_spread",
+    "atr_pct_14",
+    "funding_rate",
+    "funding_rate_zscore_7d",
+    "fear_greed_index",
+    "fear_greed_delta_1d",
+    "open_interest_delta_pct",
+    "social_dominance",
+    "social_volume_delta",
+    "market_cap_rank_pctile",
+    "cmc_volume_1h_ratio",
+    "bnb_corr_48",
+    "bnb_beta_48",
+    "sector_momentum_16",
+    "universe_breadth_1h",
+    "relative_strength_vs_bnb_16",
+    "volume_rank_pctile",
+    "volume_skew_3h_6h",
+    "price_accel_1h",
+    "bnb_residual_1h",
+    "funding_rate_percentile",
+    "fear_greed_bucket",
+    "token_historical_win_rate",
+    "range_compression_6h",
+    "volume_price_divergence",
+    "body_to_range_ratio",
+    "hour_of_day",
+    "day_of_week"
+  ],
+  "git_sha": "0270ff02e6e02e8657f7386e6af87f7ea7bf6b01",
+  "metrics": {
+    "mean_accuracy": 0.7735042735042734,
+    "mean_auc": 0.663514882819611,
+    "model_pnl_usdc": 0.0,
+    "pnl_delta_usdc": 0.0,
+    "rule_pnl_usdc": 0.0,
+    "selected_trades": 570.0,
+    "training_rows": 8424.0
+  },
+  "promotion_gate": {
+    "checks": {
+      "auc_above_chance": true,
+      "beats_rule_pnl": false,
+      "enough_selected_trades": true,
+      "enough_training_rows": true
+    },
+    "passed": false,
+    "rule_baseline": "all rule-engine entries in held-out walk-forward folds",
+    "thresholds": {
+      "min_selected_trades": 3,
+      "min_training_rows": 10
+    }
+  },
+  "target": "entry_win_after_fees",
+  "threshold": 0.55,
+  "trained_at": "2026-06-18T17:12:46.465402+00:00",
+  "version": "entry_quality_v1"
+}

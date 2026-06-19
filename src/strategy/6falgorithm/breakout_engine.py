@@ -77,12 +77,22 @@ class _CheapCandidate:
     chase_cap_exceeded: bool
     momentum_1h: float = 0.0
     momentum_24h: float = 0.0
+    atr_ratio: float = 1.0
     # Raw indicator readings retained for telemetry/audit display.
     rsi: float | None = None
     funding_rate: float | None = None
     open_interest_change: float | None = None
     price: float | None = None
     last_reference_high: float | None = None
+    derivatives_score: float = 0.5
+    atr_pass: bool = True
+    momentum_7d: float = 0.0
+    momentum_30d: float = 0.0
+    momentum_90d: float = 0.0
+    cmc_rank: int | None = None
+    watchlist_count: int | None = None
+    circulating_supply: float | None = None
+
 
 
 @dataclass(frozen=True)
@@ -93,7 +103,7 @@ class _BreakoutProfile:
     chase_cap_exceeded: bool
 
 
-MAX_UNIVERSE_TWAK_QUOTES = 2
+MAX_UNIVERSE_TWAK_QUOTES = 4  # was 2
 
 
 class LocalCache:
@@ -182,8 +192,11 @@ class BreakoutEngine:
         self.price_cache = LocalCache("price_cache.json")
         self.volume_cache = LocalCache("volume_cache.json")
         self.macro_cache = LocalCache("macro_cache.json")
-        self._macro_context_results: dict[tuple[float | None, float | None, float | None], tuple[float, float]] = {}
+        self.funding_cache = LocalCache("funding_cache.json")
+        self._macro_context_results: dict[tuple[float | None, float | None, float | None, float | None, float | None], tuple[float, float]] = {}
+
         self._missing_factor_warnings: set[tuple[str, str]] = set()
+        self._last_momentum_z_scores: dict[str, float] = {}
 
     def evaluate_token(
         self,
@@ -236,13 +249,25 @@ class BreakoutEngine:
             )
 
         candidate = self._evaluate_cheap_candidate(token_data, portfolio_value_usdc)
+        if not candidate.atr_pass:
+            return BreakoutDecision(
+                should_enter=False,
+                symbol=candidate.symbol or None,
+                position_size_usdc=0.0,
+                factor_scores={},
+                true_factor_count=0,
+                reason="ATR below mean — low volatility regime blocked",
+                ml_context=ml_context,
+            )
         token_sentiment: dict[str, Any] = {}
         if self.sentiment_tier1 is not None:
             try:
                 token_sentiment = self.sentiment_tier1.get_token_sentiment(candidate.symbol)
             except Exception:
                 token_sentiment = {}
-        entry_score = self._entry_score(candidate, momentum_z_score=0.0, token_sentiment=token_sentiment)
+        cached_z = self._last_momentum_z_scores.get(candidate.symbol, 0.0)
+        entry_score = self._entry_score(candidate, momentum_z_score=cached_z, token_sentiment=token_sentiment, atr_ratio=candidate.atr_ratio)
+
         estimated_slippage: float | None = None
         quote_state = "not_quoted"
         if self._should_quote_candidate(candidate, entry_score):
@@ -253,6 +278,7 @@ class BreakoutEngine:
         self.price_cache.save()
         self.volume_cache.save()
         self.macro_cache.save()
+        self.funding_cache.save()
         return decision
 
     def _evaluate_cheap_candidate(
@@ -264,12 +290,21 @@ class BreakoutEngine:
         """Evaluate all candidate factors that do not require TWAK."""
 
         symbol = str(token_data.get("symbol", "")).upper()
+        atr_pass, atr_ratio = self._atr_regime(symbol)
         price = self._positive_number(token_data.get("price"))
         volume_24h = self._positive_number(token_data.get("volume_24h"))
         market_cap = self._positive_number(token_data.get("market_cap"))
         rsi = self._positive_number(token_data.get("rsi"))
         funding_rate = self._number(token_data.get("funding_rate"))
         open_interest_change = self._number(token_data.get("open_interest_change_pct"))
+        momentum_7d = self._number(token_data.get("percent_change_7d")) or 0.0
+        momentum_30d = self._number(token_data.get("percent_change_30d")) or 0.0
+        momentum_90d = self._number(token_data.get("percent_change_90d")) or 0.0
+        cmc_rank = self._number(token_data.get("cmc_rank"))
+        cmc_rank = int(cmc_rank) if cmc_rank is not None else None
+        watchlist_count = self._number(token_data.get("watchlist_count"))
+        watchlist_count = int(watchlist_count) if watchlist_count is not None else None
+        circulating_supply = self._positive_number(token_data.get("circulating_supply"))
 
         volume_breakout, volume_surge_score = self._volume_signal(symbol, token_data, volume_24h, market_cap)
 
@@ -298,8 +333,10 @@ class BreakoutEngine:
             else:
                 self._warn_missing_factor_once(symbol, "derivatives_risk_clear")
                 derivatives_risk_clear = False
+            derivatives_score = 0.5
         else:
             derivatives_risk_clear = not (abs(funding_rate) > 0.0015 or open_interest_change < -10.0)
+            derivatives_score = 1.0 if derivatives_risk_clear else 0.0
 
         six_hour_high_break = breakout_profile.six_hour_high_break
         cheap_core_pass_count = sum(
@@ -342,7 +379,41 @@ class BreakoutEngine:
             open_interest_change=open_interest_change,
             price=price,
             last_reference_high=breakout_profile.broken_reference_high,
+            derivatives_score=derivatives_score,
+            atr_pass=atr_pass,
+            atr_ratio=atr_ratio,
+            momentum_7d=momentum_7d,
+            momentum_30d=momentum_30d,
+            momentum_90d=momentum_90d,
+            cmc_rank=cmc_rank,
+            watchlist_count=watchlist_count,
+            circulating_supply=circulating_supply,
         )
+
+    def _compute_atr_14(self, symbol: str) -> tuple[float | None, float | None]:
+        """Compute 14-period ATR and 20-period mean from price_cache."""
+        points = self.price_cache.data.get(symbol, [])
+        if len(points) < 14:
+            return None, None
+        # Sort by timestamp
+        sorted_points = sorted(points, key=lambda p: p.get("timestamp", 0))
+        prices = [self.price_cache._point_value(p) for p in sorted_points]
+        prices = [p for p in prices if p is not None]
+        if len(prices) < 14:
+            return None, None
+        # True Range approximation: |price[i] - price[i-1]|
+        tr_values = [abs(prices[i] - prices[i - 1]) for i in range(1, len(prices))]
+        atr_14 = sum(tr_values[-14:]) / 14.0
+        atr_mean = sum(tr_values[-20:]) / min(20, len(tr_values)) if tr_values else None
+        return atr_14, atr_mean
+
+    def _atr_regime(self, symbol: str) -> tuple[bool, float]:
+        """Return (pass, atr_ratio). Pass if ATR >= 20-period mean."""
+        atr_14, atr_mean = self._compute_atr_14(symbol)
+        if atr_14 is None or atr_mean is None or atr_mean <= 0:
+            return True, 1.0  # fail-open if data missing
+        atr_ratio = atr_14 / atr_mean
+        return atr_ratio >= 1.0, atr_ratio
 
     def _estimate_candidate_slippage(self, candidate: _CheapCandidate) -> tuple[float | None, str]:
         """Quote slippage and report whether the quote succeeded.
@@ -379,7 +450,7 @@ class BreakoutEngine:
     ) -> BreakoutDecision:
         """Build a full decision after optional TWAK slippage evaluation."""
 
-        resolved_score = self._entry_score(candidate, momentum_z_score=0.0, token_sentiment=token_sentiment) if entry_score is None else entry_score
+        resolved_score = self._entry_score(candidate, momentum_z_score=0.0, token_sentiment=token_sentiment, atr_ratio=candidate.atr_ratio) if entry_score is None else entry_score
         slippage_under_cap = (
             estimated_slippage is not None
             and estimated_slippage >= 0
@@ -640,6 +711,8 @@ class BreakoutEngine:
             candidate = self._evaluate_cheap_candidate(
                 enriched_data, portfolio_value_usdc, bnb_data=bnb_reference
             )
+            if not candidate.atr_pass:
+                continue
             candidates.append(candidate)
 
         # Fetch token sentiments in batch for candidates
@@ -663,11 +736,13 @@ class BreakoutEngine:
                 best_volume = candidate.volume_24h
 
         momentum_scores = self._momentum_z_scores(candidates)
+        self._last_momentum_z_scores = momentum_scores
         scores_by_symbol = {
             candidate.symbol: self._entry_score(
                 candidate,
                 momentum_z_score=momentum_scores.get(candidate.symbol, 0.0),
                 token_sentiment=token_sentiments.get(candidate.symbol, {}),
+                atr_ratio=candidate.atr_ratio,
             )
             for candidate in candidates
         }
@@ -717,6 +792,7 @@ class BreakoutEngine:
         self.price_cache.save()
         self.volume_cache.save()
         self.macro_cache.save()
+        self.funding_cache.save()
         self._log_factor_matrix(candidates, scores_by_symbol, momentum_scores, bnb_reference)
 
         if passers:
@@ -752,20 +828,21 @@ class BreakoutEngine:
     @property
     def _quote_score_floor(self) -> float:
         threshold = float(getattr(self.settings, "breakout_entry_score_min", 45.0))
-        buffer = max(0.0, float(getattr(self.settings, "breakout_quote_score_buffer", 5.0)))
-        return max(0.0, threshold - buffer)
+        return max(0.0, threshold + 3.0)
 
     def _should_quote_candidate(self, candidate: _CheapCandidate, entry_score: float) -> bool:
         return not candidate.chase_cap_exceeded and entry_score >= self._quote_score_floor
 
-    def _entry_score(self, candidate: _CheapCandidate, momentum_z_score: float, token_sentiment: dict[str, Any] | None = None) -> float:
+    def _entry_score(self, candidate: _CheapCandidate, momentum_z_score: float, token_sentiment: dict[str, Any] | None = None, atr_ratio: float = 1.0) -> float:
+        weights = self._regime_adjusted_weights(atr_ratio)
         score = 0.0
-        score += self._score_weight("breakout") * self._clamp01(candidate.breakout_strength)
-        score += self._score_weight("volume") * self._clamp01(candidate.volume_surge_score)
-        score += self._score_weight("momentum") * self._momentum_component(momentum_z_score)
-        score += self._score_weight("rsi") * (1.0 if candidate.rsi_in_range else 0.0)
-        score += self._score_weight("derivatives") * (1.0 if candidate.derivatives_risk_clear else 0.0)
-        score += self._score_weight("macro") * self._clamp01(candidate.macro_score)
+        score += weights["breakout"] * self._clamp01(candidate.breakout_strength)
+        score += weights["volume"] * self._clamp01(candidate.volume_surge_score)
+        score += weights["momentum"] * self._momentum_component(momentum_z_score)
+        score += weights["rsi"] * self._rsi_component(candidate.rsi)
+        score += weights["derivatives"] * self._derivatives_component(candidate.funding_rate, candidate.open_interest_change)
+        score += weights["macro"] * self._clamp01(candidate.macro_score)
+
         # Token-specific sentiment modifiers (CMC MCP news + narratives)
         if token_sentiment:
             if token_sentiment.get("news_bearish_last_4h"):
@@ -784,6 +861,62 @@ class BreakoutEngine:
     @staticmethod
     def _clamp01(value: float) -> float:
         return max(0.0, min(1.0, float(value)))
+
+    def _rsi_component(self, rsi: float | None) -> float:
+        """Smooth bell curve centered at 65. Zero at 45 and 85."""
+        if rsi is None:
+            return 0.0
+        distance = abs(rsi - 65.0)
+        if distance >= 20.0:
+            return 0.0
+        return 1.0 - (distance / 20.0)
+
+    def _regime_adjusted_weights(self, atr_ratio: float) -> dict[str, float]:
+        """Return weight dict summing to 100 based on ATR regime."""
+        base = {
+            "breakout": 35.0,
+            "volume": 25.0,
+            "momentum": 15.0,
+            "rsi": 10.0,
+            "derivatives": 10.0,
+            "macro": 5.0,
+        }
+        if atr_ratio > 1.5:
+            weights = {
+                "breakout": 30.0,
+                "volume": 20.0,
+                "momentum": 25.0,
+                "rsi": 5.0,
+                "derivatives": 10.0,
+                "macro": 10.0,
+            }
+        elif atr_ratio < 0.7:
+            weights = {
+                "breakout": 20.0,
+                "volume": 40.0,
+                "momentum": 10.0,
+                "rsi": 15.0,
+                "derivatives": 10.0,
+                "macro": 5.0,
+            }
+        else:
+            weights = dict(base)
+        # Renormalize to sum 100
+        total = sum(weights.values())
+        if total != 100.0:
+            weights = {k: v * 100.0 / total for k, v in weights.items()}
+        return weights
+
+    def _derivatives_component(self, funding_rate: float | None, oi_change: float | None) -> float:
+        """Continuous derivatives score: 0.5 = neutral, 1.0 = favorable squeeze, 0.0 = overheated."""
+        if funding_rate is None or oi_change is None:
+            return 0.5  # neutral — no free pass, no penalty
+        # Simplified funding z-score (normalized against 0.1% std)
+        funding_z = funding_rate / 0.001
+        # Extreme negative funding (shorts paying) = squeeze setup = high score
+        funding_score = self._clamp01(0.5 - funding_z * 0.5)
+        oi_norm = self._clamp01(1.0 + oi_change / 100.0)
+        return 0.6 * funding_score + 0.4 * oi_norm
 
     def _reference_windows(self) -> tuple[int, ...]:
         raw = getattr(self.settings, "breakout_reference_windows_hours", list(DEFAULT_REFERENCE_WINDOWS_HOURS))
@@ -889,9 +1022,11 @@ class BreakoutEngine:
         total_market_cap = self._positive_number(token_data.get("macro_total_market_cap"))
         btc_dominance = self._number(token_data.get("macro_btc_dominance"))
         stablecoin_dominance = self._number(token_data.get("macro_stablecoin_dominance"))
-        if total_market_cap is None and btc_dominance is None and stablecoin_dominance is None:
+        stablecoin_market_cap = self._positive_number(token_data.get("macro_stablecoin_market_cap"))
+        defi_market_cap = self._positive_number(token_data.get("macro_defi_market_cap"))
+        if total_market_cap is None and btc_dominance is None and stablecoin_dominance is None and stablecoin_market_cap is None and defi_market_cap is None:
             return 0.0, 1.0
-        cache_key = (total_market_cap, btc_dominance, stablecoin_dominance)
+        cache_key = (total_market_cap, btc_dominance, stablecoin_dominance, stablecoin_market_cap, defi_market_cap)
         cached = self._macro_context_results.get(cache_key)
         if cached is not None:
             return cached
@@ -901,16 +1036,24 @@ class BreakoutEngine:
         total_delta = self._macro_delta("TOTAL_MARKET_CAP", total_market_cap)
         btc_delta = self._macro_delta("BTC_DOMINANCE", btc_dominance)
         stable_delta = self._macro_delta("STABLECOIN_DOMINANCE", stablecoin_dominance)
+        stable_slope = self._macro_delta("STABLECOIN_MARKET_CAP", stablecoin_market_cap)
+        defi_delta = self._macro_delta("DEFI_MARKET_CAP", defi_market_cap)
 
         if total_delta is not None:
             observed += 1
-            score += 0.4 if total_delta >= 0 else 0.0
+            score += 0.25 if total_delta >= 0 else 0.0
         if btc_delta is not None:
             observed += 1
-            score += 0.3 if btc_delta <= 0.25 else 0.0
+            score += 0.20 if btc_delta <= 0.25 else 0.0
         if stable_delta is not None:
             observed += 1
-            score += 0.3 if stable_delta <= 0 else 0.0
+            score += 0.15 if stable_delta <= 0 else 0.0
+        if stable_slope is not None:
+            observed += 1
+            score += 0.25 if stable_slope > 0 else 0.0
+        if defi_delta is not None:
+            observed += 1
+            score += 0.15 if defi_delta >= 0 else 0.0
         if observed == 0:
             result = (0.0, 1.0)
             self._macro_context_results[cache_key] = result
@@ -982,6 +1125,13 @@ class BreakoutEngine:
                         "volume_24h": candidate.volume_24h,
                         "momentum_1h": candidate.momentum_1h,
                         "momentum_24h": candidate.momentum_24h,
+                        "momentum_7d": candidate.momentum_7d,
+                        "momentum_30d": candidate.momentum_30d,
+                        "momentum_90d": candidate.momentum_90d,
+                        "atr_ratio": candidate.atr_ratio,
+                        "cmc_rank": candidate.cmc_rank,
+                        "watchlist_count": candidate.watchlist_count,
+                        "circulating_supply": candidate.circulating_supply,
                     },
                     "missing": {
                         "rsi": self._positive_number(token_data.get("rsi")) is None,

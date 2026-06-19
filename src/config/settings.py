@@ -384,7 +384,7 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "breakout_score_weight_momentum": _get_float("BREAKOUT_SCORE_WEIGHT_MOMENTUM", 15.0),
         "breakout_score_weight_rsi": _get_float("BREAKOUT_SCORE_WEIGHT_RSI", 10.0),
         "breakout_score_weight_derivatives": _get_float("BREAKOUT_SCORE_WEIGHT_DERIVATIVES", 10.0),
-        "breakout_score_weight_macro": _get_float("BREAKOUT_SCORE_WEIGHT_MACRO", 5.0),
+        "breakout_score_weight_macro": _get_float("BREAKOUT_SCORE_WEIGHT_MACRO", 15.0),
         "breakout_min_true_factor_count": _get_int("BREAKOUT_MIN_TRUE_FACTOR_COUNT", 3),
         "breakout_block_in_risk_off_regime": _get_bool("BREAKOUT_BLOCK_IN_RISK_OFF_REGIME", True),
         "breakout_require_rsi_in_range": _get_bool("BREAKOUT_REQUIRE_RSI_IN_RANGE", True),
@@ -456,6 +456,9 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "rweal_blackout_horizon_hours": _get_float("RWEAL_BLACKOUT_HORIZON_HOURS", 6.0),
         "rweal_post_event_minutes": _get_int("RWEAL_POST_EVENT_MINUTES", 60),
     }
+    # Alias deprecated min_entry_factors into breakout_min_true_factor_count so
+    # the engine actually respects the setting.
+    values["breakout_min_true_factor_count"] = values.get("min_entry_factors", values.get("breakout_min_true_factor_count", 3))
     mode = str(values.get("strategy_mode", "breakout")).strip().lower()
     if mode not in {"breakout", "scalping"}:
         mode = "breakout"
