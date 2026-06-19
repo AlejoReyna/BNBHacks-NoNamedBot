@@ -1196,10 +1196,12 @@ def _risk_allows_new_entries(
     if settings.strategy_mode == "scalping" and isinstance(guardrails, ScalpingGuardrails):
         return guardrails.scalping_entries_allowed(portfolio_value)
     open_position_count = len(position_manager.list_open_positions()) if position_manager else 0
-    regime_str = ""
-    if regime_result is not None:
-        regime_str = getattr(getattr(regime_result, "regime", None), "value", str(regime_result)) or ""
-    return guardrails.can_open_new_trade(open_position_count, regime_str)
+    daily_count = int(getattr(guardrails, "_daily_trade_count", 0))
+    max_daily = risk_decision.max_daily_trades
+    global_max = getattr(settings, "global_max_daily_trades", 0)
+    if global_max > 0 and daily_count >= global_max:
+        return False
+    return (open_position_count + daily_count) < max_daily
 
 
 def _entries_blocked_reason(
@@ -1219,10 +1221,14 @@ def _entries_blocked_reason(
         if not guardrails.scalping_entries_allowed(portfolio_value):
             return "scalping_guardrails"
     open_position_count = len(position_manager.list_open_positions()) if position_manager else 0
-    regime_str = ""
-    if regime_result is not None:
-        regime_str = getattr(getattr(regime_result, "regime", None), "value", str(regime_result)) or ""
-    if not guardrails.can_open_new_trade(open_position_count, regime_str):
+    daily_count = int(getattr(guardrails, "_daily_trade_count", 0))
+    max_daily = risk_decision.max_daily_trades
+    global_max = getattr(settings, "global_max_daily_trades", 0)
+    if global_max > 0 and daily_count >= global_max:
+        if risk_decision.state == RiskState.REDUCED_RISK:
+            return "reduced_risk_daily_trade_limit"
+        return "daily_trade_limit"
+    if (open_position_count + daily_count) >= max_daily:
         if risk_decision.state == RiskState.REDUCED_RISK:
             return "reduced_risk_daily_trade_limit"
         return "daily_trade_limit"
