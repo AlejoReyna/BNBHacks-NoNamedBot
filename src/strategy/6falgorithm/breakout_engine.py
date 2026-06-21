@@ -105,6 +105,7 @@ class _BreakoutProfile:
     six_hour_high_break: bool
     strength: float
     broken_reference_high: float | None
+    six_reference: float | None
     chase_cap_exceeded: bool
 
 
@@ -346,7 +347,9 @@ class BreakoutEngine:
                 self._warn_missing_factor_once(symbol, "rsi_in_range")
             rsi_in_range = False
         else:
-            rsi_in_range = 55.0 <= rsi <= 75.0
+            rsi_lower = float(getattr(self.settings, "breakout_rsi_lower", 55.0))
+            rsi_upper = float(getattr(self.settings, "breakout_rsi_upper", 75.0))
+            rsi_in_range = rsi_lower <= rsi <= rsi_upper
 
         if funding_rate is None or open_interest_change is None:
             # CMC has no funding/OI feed, so this data is structurally absent.
@@ -403,7 +406,7 @@ class BreakoutEngine:
             funding_rate=funding_rate,
             open_interest_change=open_interest_change,
             price=price,
-            last_reference_high=breakout_profile.broken_reference_high,
+            last_reference_high=breakout_profile.six_reference,
             derivatives_score=derivatives_score,
             atr_pass=atr_pass,
             atr_ratio=atr_ratio,
@@ -718,10 +721,12 @@ class BreakoutEngine:
                 f"{estimated_slippage * 100:.2f}% · cap {cap_pct:.2f}%"
             )
 
+        rsi_lower = float(getattr(self.settings, "breakout_rsi_lower", 55.0))
+        rsi_upper = float(getattr(self.settings, "breakout_rsi_upper", 75.0))
         if candidate.rsi is None:
-            metrics["rsi_in_range"] = "RSI n/a · band 55–75"
+            metrics["rsi_in_range"] = f"RSI n/a · band {rsi_lower:.0f}–{rsi_upper:.0f}"
         else:
-            metrics["rsi_in_range"] = f"RSI {candidate.rsi:.1f} · band 55–75"
+            metrics["rsi_in_range"] = f"RSI {candidate.rsi:.1f} · band {rsi_lower:.0f}–{rsi_upper:.0f}"
 
         if candidate.funding_rate is None or candidate.open_interest_change is None:
             if bool(getattr(self.settings, "derivatives_neutral_on_missing", False)):
@@ -1180,6 +1185,7 @@ class BreakoutEngine:
             six_hour_high_break=six_hour_high_break,
             strength=strength,
             broken_reference_high=broken_reference_high,
+            six_reference=six_reference,
             chase_cap_exceeded=chase_cap_exceeded,
         )
 

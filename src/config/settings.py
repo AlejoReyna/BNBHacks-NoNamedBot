@@ -151,6 +151,8 @@ class Settings(BaseModel):
     breakout_min_true_factor_count: int = Field(default=3, ge=0, le=6)
     breakout_block_in_risk_off_regime: bool = True
     breakout_require_rsi_in_range: bool = True
+    breakout_rsi_lower: float = 55.0
+    breakout_rsi_upper: float = 75.0
     breakout_min_entry_score_buffer: float = 0.0
     # ML-aware guards. Only applied when an ML context is available.
     breakout_ml_min_confidence: float = 0.55
@@ -415,6 +417,8 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "breakout_min_true_factor_count": _get_int("BREAKOUT_MIN_TRUE_FACTOR_COUNT", 3),
         "breakout_block_in_risk_off_regime": _get_bool("BREAKOUT_BLOCK_IN_RISK_OFF_REGIME", True),
         "breakout_require_rsi_in_range": _get_bool("BREAKOUT_REQUIRE_RSI_IN_RANGE", True),
+        "breakout_rsi_lower": _get_float("BREAKOUT_RSI_LOWER", 55.0),
+        "breakout_rsi_upper": _get_float("BREAKOUT_RSI_UPPER", 75.0),
         "breakout_min_entry_score_buffer": _get_float("BREAKOUT_MIN_ENTRY_SCORE_BUFFER", 0.0),
         "breakout_ml_min_confidence": _get_float("BREAKOUT_ML_MIN_CONFIDENCE", 0.55),
         "breakout_block_in_chop_regime": _get_bool("BREAKOUT_BLOCK_IN_CHOP_REGIME", True),
