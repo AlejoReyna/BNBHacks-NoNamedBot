@@ -16,6 +16,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from dotenv import dotenv_values
+
 from src.config.settings import Settings, load_settings
 from src.strategy.guardrails import Guardrails, RiskState
 from src.strategy.position_manager import Position, PositionManager
@@ -267,3 +269,22 @@ class TestTighterKillSwitch:
             assert g._daily_loss_limit_hit(20.0)
             g._daily_realized_loss_usdc = 0.39  # below 2 % of $20
             assert not g._daily_loss_limit_hit(20.0)
+
+
+class TestCompetitionConfigFeasibility:
+    """The $20 AUM competition config must allow the bot to enter positions."""
+
+    def test_twenty_dollar_aum_can_enter_position(self) -> None:
+        # Load the actual project .env as a dict without mutating os.environ.
+        env = dotenv_values(".env")  # type: ignore[arg-type]
+        settings = load_settings(str(".env"))
+
+        max_position_pct = float(env.get("MAX_POSITION_PCT", settings.max_position_pct))
+        min_position_size = float(env.get("MIN_POSITION_SIZE_USD", settings.min_position_size_usd))
+        portfolio = 20.0
+
+        assert max_position_pct * portfolio >= min_position_size, (
+            f"With ${portfolio} AUM, MAX_POSITION_PCT={max_position_pct} gives "
+            f"${max_position_pct * portfolio:.2f} position size, which is below "
+            f"MIN_POSITION_SIZE_USD={min_position_size}. The bot will never enter."
+        )
