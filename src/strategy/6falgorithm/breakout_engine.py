@@ -771,10 +771,6 @@ class BreakoutEngine:
         skipped_count = 0
         for symbol, token_data in market_snapshot.items():
             normalized = symbol.upper()
-            # Fix #5: only score enriched symbols, open positions, or regime refs.
-            if enriched_symbols and normalized not in enriched_symbols | position_symbols | regime_refs:
-                skipped_count += 1
-                continue
             if not is_tradable_symbol(symbol) or not is_momentum_candidate_symbol(symbol):
                 continue
             # Skip symbols TWAK cannot execute (no verified BEP-20 contract): they
@@ -806,13 +802,13 @@ class BreakoutEngine:
             if not candidate.atr_pass:
                 continue
             candidates.append(candidate)
-        # Fix #5: log enrichment-vs-universe mismatch once per evaluation.
-        if enriched_symbols and (evaluated_count + skipped_count) > 0:
+        if evaluated_count > 0:
+            x402_count = sum(1 for c in candidates if c.symbol in enriched_symbols)
             LOGGER.info(
-                "Evaluating %d/%d enriched symbols; remaining %d skipped (keyless-only).",
+                "Evaluated %d symbols (%d x402-enriched, %d keyless+Binance RSI).",
                 evaluated_count,
-                evaluated_count + skipped_count,
-                skipped_count,
+                x402_count,
+                evaluated_count - x402_count,
             )
 
         # Fetch token sentiments in batch for candidates
@@ -863,12 +859,9 @@ class BreakoutEngine:
                     x402_cost_usdc=x402_cost_usdc,
                     portfolio_value_usdc=portfolio_value_usdc,
                 )
-        # Fix #5: TWAK quotes are limited to enriched candidates only.
-        enriched_candidates = [
-            candidate
-            for candidate in candidates
-            if not enriched_symbols or candidate.symbol in enriched_symbols
-        ]
+        # All candidates are eligible for TWAK slippage quotes — Binance RSI
+        # now covers the full universe so keyless symbols can rank competitively.
+        enriched_candidates = candidates
         quote_candidates = sorted(
             (
                 candidate

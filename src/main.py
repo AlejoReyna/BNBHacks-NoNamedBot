@@ -2331,28 +2331,46 @@ def _fetch_snapshot(
 
 
 _binance_rsi_client = BinanceClient()
+_binance_rsi_cache: dict[str, tuple[float, float]] = {}  # symbol -> (rsi, fetched_at)
+_BINANCE_RSI_TTL = 300.0  # seconds — matches keyless snapshot refresh interval
+_TRADABLE_MOMENTUM_SYMBOLS: frozenset[str] = frozenset(
+    s.upper() for s in TRADABLE_TARGET_SYMBOLS if is_momentum_candidate_symbol(s)
+)
+
 
 def _fill_missing_rsi_from_binance(
     snapshot: dict[str, dict[str, Any]],
-    enrich_symbols: set[str],
+    enrich_symbols: set[str],  # kept for call-site compat; no longer restricts scope
 ) -> None:
-    """Fill RSI for enrichment-scope symbols that x402 did not cover.
+    """Fill RSI-14 from Binance for every tradable symbol still missing it.
 
-    Called after the merged snapshot is built. Only runs for symbols that were
-    selected for paid enrichment but still have rsi=None — meaning x402 either
-    ran out of budget, hit an error, or the symbol ranked outside the fetch
-    window. x402 remains the primary source; this is a free fallback only.
+    Covers the full snapshot universe (not just x402-enriched symbols) so the
+    breakout engine can evaluate all candidates with RSI. x402 remains the
+    primary source when it delivers data; Binance only fills gaps.
+
+    Results are cached for _BINANCE_RSI_TTL seconds so a process restart or
+    rapid successive calls do not re-fetch within the same keyless window.
     """
-    for symbol in enrich_symbols:
-        token_data = snapshot.get(symbol)
+    now = time.time()
+    filled = 0
+    for symbol, token_data in snapshot.items():
         if not isinstance(token_data, dict):
             continue
         if token_data.get("rsi") is not None:
             continue
+        if symbol.upper() not in _TRADABLE_MOMENTUM_SYMBOLS:
+            continue
+        cached = _binance_rsi_cache.get(symbol)
+        if cached is not None and (now - cached[1]) < _BINANCE_RSI_TTL:
+            token_data["rsi"] = cached[0]
+            continue
         rsi = _binance_rsi_client.get_rsi14(symbol)
         if rsi is not None:
             token_data["rsi"] = rsi
-            LOGGER.info("RSI fallback (Binance): %s RSI-14=%.1f", symbol, rsi)
+            _binance_rsi_cache[symbol] = (rsi, now)
+            filled += 1
+    if filled:
+        LOGGER.info("RSI fallback (Binance): filled %d symbols", filled)
 
 
 def _ensure_bnb_reference(snapshot: dict[str, dict[str, Any]], cmc_client: CMCMCPClient) -> None:
