@@ -295,7 +295,7 @@ class Guardrails:
             self._reset_recorded_loss_day_if_needed(now)
             return
         self._daily_date = now.date()
-        self._daily_trade_count = open_position_count
+        self._daily_trade_count = 0
         self._daily_realized_loss_usdc = 0.0
         self._daily_loss_pct = 0.0
         if self._paused_until is not None and self._paused_until <= now:
@@ -408,7 +408,7 @@ class Guardrails:
                 True,
                 0.5,
                 strict_slippage,
-                max_daily,
+                max(1, max_daily // 2),
                 base_risk * 0.5,
                 reasons,
             )

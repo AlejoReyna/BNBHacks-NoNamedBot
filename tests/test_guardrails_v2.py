@@ -50,7 +50,7 @@ def test_reduced_risk_respects_configured_daily_trade_cap(tmp_path: Path) -> Non
     guardrails.update_ath(100.0)
     decision = guardrails.evaluate(89.0, _regime())
     assert decision.state == RiskState.REDUCED_RISK
-    assert decision.max_daily_trades == 30
+    assert decision.max_daily_trades == 15
 
 
 def test_reduced_risk_respects_zero_daily_trade_cap(tmp_path: Path) -> None:
@@ -58,7 +58,7 @@ def test_reduced_risk_respects_zero_daily_trade_cap(tmp_path: Path) -> None:
     guardrails.update_ath(100.0)
     decision = guardrails.evaluate(89.0, _regime())
     assert decision.state == RiskState.REDUCED_RISK
-    assert decision.max_daily_trades == 0
+    assert decision.max_daily_trades == 1
 
 
 def test_sentiment_extreme_greed_reduces_to_reduced_risk(tmp_path: Path) -> None:

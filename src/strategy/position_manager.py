@@ -79,7 +79,7 @@ class PositionManager:
         now = datetime.now(timezone.utc)
         if regime is not None or atr_pct is not None:
             trailing_stop_pct, take_profit_pct = calculate_exit_levels(
-                entry_price, atr_pct, regime
+                entry_price, atr_pct, regime, self.settings
             )
         else:
             trailing_stop_pct = self.settings.trailing_stop_pct
@@ -340,17 +340,20 @@ def calculate_exit_levels(
     entry_price: float,
     atr_pct: float | None,
     regime: object,
+    settings: Settings | None = None,
 ) -> tuple[float, float]:
     """Return trailing-stop and take-profit percentages for a regime."""
 
+    base_stop = getattr(settings, "trailing_stop_pct", 0.09) if settings else 0.09
+    base_tp = getattr(settings, "take_profit_pct", 0.15) if settings else 0.15
     regime_value = getattr(regime, "value", str(regime))
     if regime_value == "risk_off":
         return 0.025, 0.05
     if atr_pct is None or atr_pct <= 0:
-        return 0.035, 0.08
+        return base_stop, base_tp
 
     trailing_stop_pct = max(0.035, min(0.10, float(atr_pct) * 1.5))
     take_profit_pct = max(0.08, min(0.20, float(atr_pct) * 3.0))
     if regime_value == "trending_up":
         return trailing_stop_pct, take_profit_pct
-    return min(trailing_stop_pct, 0.06), min(take_profit_pct, 0.12)
+    return min(trailing_stop_pct, base_stop), min(take_profit_pct, base_tp)

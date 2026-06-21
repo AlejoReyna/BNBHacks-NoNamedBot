@@ -84,9 +84,9 @@ class Settings(BaseModel):
     loop_seconds: int = 300
     price_cache_maxlen: int = 2880
     max_position_pct: float = 0.05
-    max_daily_trades: int = 3
+    max_daily_trades: int = 20
     max_daily_trades_by_regime: dict[str, int] | None = None
-    global_max_daily_trades: int = 6
+    global_max_daily_trades: int = 20
     min_position_size_usd: float = 2.0
     max_daily_loss_pct: float = 0.02
     max_slippage_pct: float = 0.01
@@ -95,14 +95,14 @@ class Settings(BaseModel):
     swap_approval_spender_address: str = "0x8157a9d65807521fbb8db8f37eeecefdd247e9b1"
     drawdown_soft_stop_pct: float = 0.10
     drawdown_kill_switch_pct: float = 0.18
-    trailing_stop_pct: float = 0.06
-    take_profit_pct: float = 0.08
+    trailing_stop_pct: float = 0.09
+    take_profit_pct: float = 0.15
     base_risk_per_trade_pct: float = 0.0035
     # Realization rules (breakout mode). max_hold_hours forces a time-stop on
     # positions that never hit target or trailing stop (0 disables). The
     # competition window flatten liquidates the whole book to USDC shortly
     # before the deadline so the final score is realized cash, not paper.
-    max_hold_hours: float = 8.0
+    max_hold_hours: float = 0.0
     competition_end_utc: str = ""
     flatten_before_end_minutes: int = 30
     risk_off_max_slippage_pct: float = 0.005
@@ -354,9 +354,9 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "loop_seconds": loop_seconds,
         "price_cache_maxlen": _get_int("PRICE_CACHE_MAXLEN", 2880),
         "max_position_pct": _get_float("MAX_POSITION_PCT", 0.05),
-        "max_daily_trades": _get_int("MAX_DAILY_TRADES", 3),
-        "max_daily_trades_by_regime": _get_dict("MAX_DAILY_TRADES_BY_REGIME", {"trending_up": 4, "ranging": 2, "risk_off": 0}),
-        "global_max_daily_trades": _get_int("GLOBAL_MAX_DAILY_TRADES", 6),
+        "max_daily_trades": _get_int("MAX_DAILY_TRADES", 20),
+        "max_daily_trades_by_regime": _get_dict("MAX_DAILY_TRADES_BY_REGIME", {"trending_up": 8, "ranging": 5, "risk_off": 2}),
+        "global_max_daily_trades": _get_int("GLOBAL_MAX_DAILY_TRADES", 20),
         "min_position_size_usd": _get_float("MIN_POSITION_SIZE_USD", 2.0),
         "max_daily_loss_pct": _get_float("MAX_DAILY_LOSS_PCT", 0.02),
         "max_slippage_pct": _get_float("MAX_SLIPPAGE_PCT", 0.01),
@@ -368,10 +368,10 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         ),
         "drawdown_soft_stop_pct": _get_float("DRAWDOWN_SOFT_STOP_PCT", 0.10),
         "drawdown_kill_switch_pct": _get_float("DRAWDOWN_KILL_SWITCH_PCT", 0.18),
-        "trailing_stop_pct": _get_float("TRAILING_STOP_PCT", 0.06),
-        "take_profit_pct": _get_float("TAKE_PROFIT_PCT", 0.08),
+        "trailing_stop_pct": _get_float("TRAILING_STOP_PCT", 0.09),
+        "take_profit_pct": _get_float("TAKE_PROFIT_PCT", 0.15),
         "base_risk_per_trade_pct": _get_float("BASE_RISK_PER_TRADE_PCT", 0.0035),
-        "max_hold_hours": _get_float("MAX_HOLD_HOURS", 8.0),
+        "max_hold_hours": _get_float("MAX_HOLD_HOURS", 0.0),
         "competition_end_utc": os.getenv("COMPETITION_END_UTC", ""),
         "flatten_before_end_minutes": _get_int("FLATTEN_BEFORE_END_MINUTES", 30),
         "risk_off_max_slippage_pct": _get_float("RISK_OFF_MAX_SLIPPAGE_PCT", 0.005),

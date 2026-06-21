@@ -1234,7 +1234,9 @@ def _risk_allows_new_entries(
     global_max = getattr(settings, "global_max_daily_trades", 0)
     if global_max > 0 and daily_count >= global_max:
         return False
-    return (open_position_count + daily_count) < max_daily
+    if open_position_count >= max_daily:
+        return False
+    return True
 
 
 def _entries_blocked_reason(
