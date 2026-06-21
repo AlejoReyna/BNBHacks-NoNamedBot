@@ -100,6 +100,9 @@ def select_enrichment_symbols(
 
     top_n = int(top_n if top_n is not None else (getattr(settings, "x402_enrich_top_n", 0) or 0))
     targets = [str(symbol).upper() for symbol in target_symbols]
+    # Exclude stablecoins and momentum-excluded from ranking; positions are
+    # added back via must_have regardless of tradability.
+    targets = [s for s in targets if is_tradable_symbol(s) and is_momentum_candidate_symbol(s)]
     if top_n <= 0 or top_n >= len(targets) or not keyless_snapshot:
         return targets
 
