@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cascade AI — Dashboard</title>
+<style>
+  /* ==========================================
+     CSS Custom Properties (Design Tokens)
+     ========================================== */
+  :root {
+    --bg: #0B0E11;
+    --bg-glass: rgba(30, 32, 38, 0.6);
+    --bg-glass-hover: rgba(30, 32, 38, 0.8);
+    --surface: #1E2026;
+    --elevated: #2B2F36;
+    --hover: #3A3F4B;
+    --text: #FFFFFF;
+    --secondary: #B0B3B8;
+    --muted: #848E9C;
+    --accent: #F0B90B;
+    --accent-dim: rgba(240, 185, 11, 0.15);
+    --green: #0ECB81;
+    --red: #F6465D;
+    --blue: #4A9EFF;
+    --purple: #9B59B6;
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-border-hover: rgba(240, 185, 11, 0.3);
+    --radius: 12px;
+    --nav-height: 64px;
+    --gap: 1rem;
+  }
+
+  /* ==========================================
+     Reset & Base
+     ========================================== */
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  /* ==========================================
+     Top Navigation Bar
+     ========================================== */
+  #top-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--nav-height);
+    z-index: 1000;
+    background: rgba(11, 14, 17, 0.8);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
+  }
+
+  @supports not (backdrop-filter: blur(16px)) {
+    #top-nav { background: var(--surface); }
+  }
+
+  .nav-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .logo-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), #D4A009);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: #000;
+    letter-spacing: -0.5px;
+  }
+
+  .brand-name {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.2px;
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    list-style: none;
+    margin-left: 1.5rem;
+  }
+
+  .nav-links a {
+    display: block;
+    padding: 0.5rem 1rem;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--secondary);
+    text-decoration: none;
+    border-radius: 8px;
+    transition: all 0.15s ease;
+  }
+
+  .nav-links a:hover,
+  .nav-links a.active {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .nav-links a.active {
+    color: var(--accent);
+  }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  #status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green), 0 0 16px var(--green);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.85); }
+  }
+
+  #mode-badge {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid rgba(240, 185, 11, 0.2);
+  }
+
+  /* Hamburger (mobile only) */
+  .hamburger {
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+    padding: 0.25rem;
+    background: none;
+    border: none;
+  }
+
+  .hamburger span {
+    display: block;
+    width: 20px;
+    height: 2px;
+    background: var(--secondary);
+    border-radius: 1px;
+    transition: all 0.2s ease;
+  }
+
+  .hamburger:hover span { background: var(--text); }
+
+  .mobile-nav-overlay {
+    display: none;
+    position: fixed;
+    top: var(--nav-height);
+    left: 0;
+    right: 0;
+    background: rgba(11, 14, 17, 0.95);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--glass-border);
+    padding: 1rem;
+    z-index: 999;
+  }
+
+  .mobile-nav-overlay.open { display: block; }
+
+  .mobile-nav-overlay a {
+    display: block;
+    padding: 0.75rem 1rem;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--secondary);
+    text-decoration: none;
+    border-radius: 8px;
+  }
+
+  .mobile-nav-overlay a:hover,
+  .mobile-nav-overlay a.active {
+    color: var(--accent);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  /* ==========================================
+     Main Container & Bento Grid
+     ========================================== */
+  main {
+    padding-top: calc(var(--nav-height) + var(--gap));
+    padding-left: var(--gap);
+    padding-right: var(--gap);
+    padding-bottom: var(--gap);
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .bento-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--gap);
+  }
+
+  /* ==========================================
+     Card Base (Glassmorphism)
+     ========================================== */
+  .card {
+    background: var(--bg-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card:hover {
+    border-color: var(--glass-border-hover);
+    background: var(--bg-glass-hover);
+    box-shadow: 0 0 20px rgba(240, 185, 11, 0.05);
+  }
+
+  @supports not (backdrop-filter: blur(12px)) {
+    .card { background: var(--surface); }
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    gap: 0.75rem;
+  }
+
+  .card-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .card-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .card-title svg {
+    width: 16px;
+    height: 16px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .card-badge {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid rgba(240, 185, 11, 0.15);
+  }
+
+  .card-badge.purple {
+    background: rgba(155, 89, 182, 0.15);
+    color: var(--purple);
+    border-color: rgba(155, 89, 182, 0.2);
+  }
+
+  .card-badge.green {
+    background: rgba(14, 203, 129, 0.15);
+    color: var(--green);
+    border-color: rgba(14, 203, 129, 0.2);
+  }
+
+  .card-badge.red {
+    background: rgba(246, 70, 93, 0.15);
+    color: var(--red);
+    border-color: rgba(246, 70, 93, 0.2);
+  }
+
+  .card-badge.blue {
+    background: rgba(74, 158, 255, 0.15);
+    color: var(--blue);
+    border-color: rgba(74, 158, 255, 0.2);
+  }
+
+  .card-badge.muted {
+    background: rgba(132, 142, 156, 0.15);
+    color: var(--muted);
+    border-color: rgba(132, 142, 156, 0.2);
+  }
+
+  /* ==========================================
+     Status Bar (Full Width)
+     ========================================== */
+  .status-bar {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--gap);
+  }
+
+  .status-pill {
+    background: rgba(30, 32, 38, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: all 0.2s ease;
+  }
+
+  .status-pill:hover {
+    border-color: var(--glass-border-hover);
+    background: rgba(30, 32, 38, 0.7);
+  }
+
+  @supports not (backdrop-filter: blur(8px)) {
+    .status-pill { background: var(--surface); }
+  }
+
+  .glow-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .glow-dot.green {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green), 0 0 16px var(--green);
+  }
+
+  .glow-dot.blue {
+    background: var(--blue);
+    box-shadow: 0 0 8px var(--blue), 0 0 16px var(--blue);
+  }
+
+  .glow-dot.gold {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent), 0 0 16px var(--accent);
+  }
+
+  .glow-dot.red {
+    background: var(--red);
+    box-shadow: 0 0 8px var(--red), 0 0 16px var(--red);
+  }
+
+  .status-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .status-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .status-pill-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  /* ==========================================
+     x402 Budget Hero Card
+     ========================================== */
+  .hero-card {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+
+  .progress-track {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 1rem 0;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+  }
+
+  #budget-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--accent), #D4A009);
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 12px rgba(240, 185, 11, 0.3);
+  }
+
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  }
+
+  .metric-row:last-child { border-bottom: none; }
+
+  .metric-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--secondary);
+  }
+
+  .metric-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .metric-value.green { color: var(--green); }
+  .metric-value.red { color: var(--red); }
+  .metric-value.accent { color: var(--accent); }
+  .metric-value.muted { color: var(--muted); }
+
+  /* ==========================================
+     Data Quality Card
+     ========================================== */
+  .data-card {
+    grid-column: span 1;
+  }
+
+  /* ==========================================
+     Positions Card
+     ========================================== */
+  .positions-card {
+    grid-column: span 1;
+  }
+
+  /* ==========================================
+     Decision Stream (Full Width)
+     ========================================== */
+  .decision-stream {
+    grid-column: 1 / -1;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    min-width: 700px;
+  }
+
+  thead {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  th {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-align: left;
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+  }
+
+  tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+
+  .action-enter { color: var(--green); font-weight: 600; }
+  .action-exit { color: var(--red); font-weight: 600; }
+  .action-wait { color: var(--muted); }
+  .action-halt { color: var(--red); font-weight: 600; }
+
+  /* ==========================================
+     x402 ROI Card
+     ========================================== */
+  .roi-card {
+    grid-column: span 2;
+  }
+
+  .mini-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 60px;
+    margin-top: 1rem;
+    padding: 0.5rem 0;
+  }
+
+  .mini-bar {
+    flex: 1;
+    border-radius: 3px 3px 0 0;
+    background: var(--accent);
+    opacity: 0.6;
+    transition: opacity 0.2s ease, height 0.4s ease;
+    min-height: 4px;
+  }
+
+  .mini-bar:hover { opacity: 1; }
+
+  .mini-bar:nth-child(odd) { opacity: 0.8; }
+
+  /* ==========================================
+     Live Logs Card (Terminal)
+     ========================================== */
+  .logs-card {
+    grid-column: span 2;
+  }
+
+  #terminal {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px;
+    color: var(--secondary);
+    max-height: 200px;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+
+  #terminal::-webkit-scrollbar { width: 6px; }
+  #terminal::-webkit-scrollbar-track { background: transparent; }
+  #terminal::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+  #terminal::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+  .log-line {
+    padding: 0.15rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  }
+
+  .log-line:last-child { border-bottom: none; }
+
+  .log-key { color: var(--purple); }
+  .log-val { color: var(--text); }
+  .log-green { color: var(--green); }
+  .log-red { color: var(--red); }
+  .log-ts { color: var(--muted); margin-right: 0.5rem; }
+
+  /* ==========================================
+     Empty State
+     ========================================== */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 2rem 1rem;
+    color: var(--muted);
+    text-align: center;
+    flex: 1;
+  }
+
+  .empty-state svg {
+    width: 32px;
+    height: 32px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.5;
+  }
+
+  .empty-state p {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+  }
+
+  /* ==========================================
+     Footer
+     ========================================== */
+  footer {
+    text-align: center;
+    padding: 1.5rem var(--gap);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  #last-refresh {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ==========================================
+     Responsive Breakpoints
+     ========================================== */
+
+  /* Tablet: 768px – 1023px */
+  @media (max-width: 1023px) {
+    .bento-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .hero-card {
+      grid-column: span 2;
+      grid-row: span 1;
+    }
+    .data-card { grid-column: span 1; }
+    .positions-card { grid-column: span 1; }
+    .decision-stream { grid-column: 1 / -1; }
+    .roi-card { grid-column: span 2; }
+    .logs-card { grid-column: span 2; }
+    .status-bar {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  /* Mobile: < 768px */
+  @media (max-width: 767px) {
+    .bento-grid {
+      grid-template-columns: 1fr;
+    }
+    .hero-card,
+    .data-card,
+    .positions-card,
+    .roi-card,
+    .logs-card,
+    .status-bar {
+      grid-column: 1 / -1;
+      grid-row: auto;
+    }
+    .status-bar {
+      grid-template-columns: 1fr;
+    }
+    .nav-links { display: none; }
+    .hamburger { display: flex; }
+    .nav-right { gap: 0.5rem; }
+    #status-dot { display: none; }
+    main {
+      padding-left: 0.75rem;
+      padding-right: 0.75rem;
+    }
+    .card { padding: 1rem; }
+    .card-title { font-size: 13px; }
+    .metric-value { font-size: 13px; }
+  }
+
+  /* Desktop nav visible */
+  @media (min-width: 768px) {
+    .mobile-nav-overlay { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ==========================================
+     Top Navigation Bar
+     ========================================== -->
+<nav id="top-nav">
+  <div class="nav-left">
+    <div class="logo">
+      <div class="logo-mark">CA</div>
+      <span class="brand-name">Cascade AI</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="#" class="active">Dashboard</a></li>
+      <li><a href="#">Positions</a></li>
+      <li><a href="#">x402</a></li>
+      <li><a href="#">Logs</a></li>
+      <li><a href="#">Chat</a></li>
+    </ul>
+  </div>
+
+  <div class="nav-right">
+    <div id="status-dot"></div>
+    <span id="mode-badge">Live</span>
+    <button class="hamburger" id="hamburger" aria-label="Menu" onclick="document.getElementById('mobile-nav').classList.toggle('open')">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- Mobile Nav Overlay -->
+<div class="mobile-nav-overlay" id="mobile-nav">
+  <a href="#" class="active">Dashboard</a>
+  <a href="#">Positions</a>
+  <a href="#">x402</a>
+  <a href="#">Logs</a>
+  <a href="#">Chat</a>
+</div>
+
+<!-- ==========================================
+     Main Bento Grid
+     ========================================== -->
+<main>
+  <div class="bento-grid">
+
+    <!-- Status Bar -->
+    <div class="status-bar card" style="padding:1rem;">
+      <div class="status-pill">
+        <div class="glow-dot green" id="status-dot"></div>
+        <div class="status-pill-text">
+          <span class="status-label">Status</span>
+          <span class="status-value" id="status-text">Online</span>
+        </div>
+      </div>
+      <div class="status-pill">
+        <div class="glow-dot blue"></div>
+        <div class="status-pill-text">
+          <span class="status-label">Last Cycle</span>
+          <span class="status-value" id="last-cycle">—</span>
+        </div>
+      </div>
+      <div class="status-pill">
+        <div class="glow-dot gold"></div>
+        <div class="status-pill-text">
+          <span class="status-label">Positions</span>
+          <span class="status-value" id="positions-count">0</span>
+        </div>
+      </div>
+      <div class="status-pill">
+        <div class="glow-dot red"></div>
+        <div class="status-pill-text">
+          <span class="status-label">Drawdown</span>
+          <span class="status-value" id="drawdown">0.00%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- x402 Budget Hero Card -->
+    <div class="card hero-card">
+      <div class="card-header">
+        <div class="card-title-wrap">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M7 7l10 10M17 7L7 17"/></svg>
+            x402 Micropayments
+          </div>
+        </div>
+        <span class="card-badge purple" id="budget-badge">Healthy</span>
+      </div>
+      <div class="progress-track">
+        <div id="budget-fill"></div>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Daily Budget</span>
+        <span class="metric-value" id="budget-daily">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Spent</span>
+        <span class="metric-value" id="budget-spent">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Remaining</span>
+        <span class="metric-value" id="budget-remaining">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Cost / Call</span>
+        <span class="metric-value" id="cost-per-call">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Calls Today</span>
+        <span class="metric-value" id="calls-today">0</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Circuit Breaker</span>
+        <span class="metric-value" id="circuit-status">Closed</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Total Spend</span>
+        <span class="metric-value accent" id="total-spend">$0.00</span>
+      </div>
+    </div>
+
+    <!-- Data Quality Card -->
+    <div class="card data-card">
+      <div class="card-header">
+        <div class="card-title-wrap">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+            Data Quality
+          </div>
+        </div>
+        <span class="card-badge green" id="data-badge">x402</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Snapshot Age</span>
+        <span class="metric-value" id="snapshot-age">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Source</span>
+        <span class="metric-value" id="data-source">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Regime</span>
+        <span class="metric-value" id="regime">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">FGI</span>
+        <span class="metric-value" id="fgi">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Risk State</span>
+        <span class="metric-value" id="risk-state">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Strategy</span>
+        <span class="metric-value" id="strategy">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Technicals</span>
+        <span class="metric-value" id="technicals">—</span>
+      </div>
+    </div>
+
+    <!-- Positions Card -->
+    <div class="card positions-card">
+      <div class="card-header">
+        <div class="card-title-wrap">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+            Positions — Live P&L
+          </div>
+        </div>
+        <span class="card-badge muted" id="pos-badge">0</span>
+      </div>
+      <div id="positions-body">
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          <p>No open positions.<br>Waiting for next signal...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Decision Stream -->
+    <div class="card decision-stream">
+      <div class="card-header">
+        <div class="card-title-wrap">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+            Autonomous Decision Stream
+          </div>
+        </div>
+        <span class="card-badge" id="decision-count">0</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Action</th>
+              <th>Symbol</th>
+              <th>Regime</th>
+              <th>Score</th>
+              <th>Reason</th>
+              <th>Mode</th>
+            </tr>
+          </thead>
+          <tbody id="decision-tbody">
+            <tr>
+              <td colspan="7">
+                <div class="empty-state" style="padding:1.5rem;">
+                  <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                  <p>No decisions yet.</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- x402 ROI Card -->
+    <div class="card roi-card">
+      <div class="card-header">
+        <div class="card-title-wrap">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M18 20V4M6 20v-6"/></svg>
+            x402 ROI Attribution
+          </div>
+        </div>
+        <span class="card-badge" id="roi-badge">x402</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Total Spend</span>
+        <span class="metric-value" id="roi-spend">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Realized P&L</span>
+        <span class="metric-value" id="roi-pnl">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Net After Cost</span>
+        <span class="metric-value" id="roi-net">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Win Rate x402</span>
+        <span class="metric-value" id="win-x402">0%</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Win Rate Keyless</span>
+        <span class="metric-value" id="win-keyless">0%</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Trades Closed</span>
+        <span class="metric-value" id="trades-closed">0</span>
+      </div>
+      <div class="mini-chart" id="roi-chart">
+        <div class="mini-bar" style="height:20%"></div>
+        <div class="mini-bar" style="height:40%"></div>
+        <div class="mini-bar" style="height:30%"></div>
+        <div class="mini-bar" style="height:60%"></div>
+        <div class="mini-bar" style="height:45%"></div>
+        <div class="mini-bar" style="height:80%"></div>
+        <div class="mini-bar" style="height:55%"></div>
+        <div class="mini-bar" style="height:70%"></div>
+        <div class="mini-bar" style="height:35%"></div>
+        <div class="mini-bar" style="height:50%"></div>
+      </div>
+    </div>
+
+    <!-- Live Logs Card -->
+    <div class="card logs-card">
+      <div class="card-header">
+        <div class="card-title-wrap">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            Live Logs
+          </div>
+        </div>
+        <span class="card-badge muted" id="log-badge">0</span>
+      </div>
+      <div id="terminal">
+        <div class="log-line">
+          <span class="log-ts">--:--:--</span>
+          <span class="log-muted">Waiting for logs...</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- ==========================================
+     Footer
+     ========================================== -->
+<footer>
+  Cascade AI — BNB Hackathon v2 · Last refresh: <span id="last-refresh">—</span>
+</footer>
+
+</body>
+</html>

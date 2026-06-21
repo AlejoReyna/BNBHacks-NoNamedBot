@@ -1,0 +1,2031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cascade AI — Dashboard</title>
+<style>
+  /* ==========================================
+     CSS Custom Properties (Design Tokens)
+     ========================================== */
+  :root {
+    --bg: #0B0E11;
+    --bg-glass: rgba(30, 32, 38, 0.6);
+    --bg-glass-hover: rgba(30, 32, 38, 0.8);
+    --surface: #1E2026;
+    --elevated: #2B2F36;
+    --hover: #3A3F4B;
+    --text: #FFFFFF;
+    --secondary: #B0B3B8;
+    --muted: #848E9C;
+    --accent: #F0B90B;
+    --accent-dim: rgba(240, 185, 11, 0.15);
+    --green: #0ECB81;
+    --red: #F6465D;
+    --blue: #4A9EFF;
+    --purple: #9B59B6;
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-border-hover: rgba(240, 185, 11, 0.3);
+    --radius: 12px;
+    --nav-height: 64px;
+    --gap: 1rem;
+  }
+
+  /* ==========================================
+     Reset & Base
+     ========================================== */
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  /* ==========================================
+     Top Navigation Bar
+     ========================================== */
+  #top-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--nav-height);
+    z-index: 1000;
+    background: rgba(11, 14, 17, 0.8);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
+  }
+
+  @supports not (backdrop-filter: blur(16px)) {
+    #top-nav { background: var(--surface); }
+  }
+
+  .nav-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .logo-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), #D4A009);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: #000;
+    letter-spacing: -0.5px;
+  }
+
+  .brand-name {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.2px;
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    list-style: none;
+    margin-left: 1.5rem;
+  }
+
+  .nav-links a {
+    display: block;
+    padding: 0.5rem 1rem;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--secondary);
+    text-decoration: none;
+    border-radius: 8px;
+    transition: all 0.15s ease;
+  }
+
+  .nav-links a:hover,
+  .nav-links a.active {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .nav-links a.active {
+    color: var(--accent);
+  }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  #nav-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green), 0 0 16px var(--green);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.85); }
+  }
+
+  #mode-badge {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid rgba(240, 185, 11, 0.2);
+  }
+
+  /* Hamburger (mobile only) */
+  .hamburger {
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+    padding: 0.25rem;
+    background: none;
+    border: none;
+  }
+
+  .hamburger span {
+    display: block;
+    width: 20px;
+    height: 2px;
+    background: var(--secondary);
+    border-radius: 1px;
+    transition: all 0.2s ease;
+  }
+
+  .hamburger:hover span { background: var(--text); }
+
+  .mobile-nav-overlay {
+    display: none;
+    position: fixed;
+    top: var(--nav-height);
+    left: 0;
+    right: 0;
+    background: rgba(11, 14, 17, 0.95);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--glass-border);
+    padding: 1rem;
+    z-index: 999;
+  }
+
+  .mobile-nav-overlay.open { display: block; }
+
+  .mobile-nav-overlay a {
+    display: block;
+    padding: 0.75rem 1rem;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--secondary);
+    text-decoration: none;
+    border-radius: 8px;
+  }
+
+  .mobile-nav-overlay a:hover,
+  .mobile-nav-overlay a.active {
+    color: var(--accent);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  /* ==========================================
+     Main Container & Bento Grid
+     ========================================== */
+  main {
+    padding-top: calc(var(--nav-height) + var(--gap));
+    padding-left: var(--gap);
+    padding-right: var(--gap);
+    padding-bottom: var(--gap);
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .bento-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--gap);
+  }
+
+  /* ==========================================
+     Card Base (Glassmorphism)
+     ========================================== */
+  .card {
+    background: var(--bg-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card:hover {
+    border-color: var(--glass-border-hover);
+    background: var(--bg-glass-hover);
+    box-shadow: 0 0 20px rgba(240, 185, 11, 0.05);
+  }
+
+  @supports not (backdrop-filter: blur(12px)) {
+    .card { background: var(--surface); }
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    gap: 0.75rem;
+  }
+
+  .card-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .card-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .card-title svg {
+    width: 16px;
+    height: 16px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .card-badge {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid rgba(240, 185, 11, 0.15);
+  }
+
+  .card-badge.purple {
+    background: rgba(155, 89, 182, 0.15);
+    color: var(--purple);
+    border-color: rgba(155, 89, 182, 0.2);
+  }
+
+  .card-badge.green {
+    background: rgba(14, 203, 129, 0.15);
+    color: var(--green);
+    border-color: rgba(14, 203, 129, 0.2);
+  }
+
+  .card-badge.red {
+    background: rgba(246, 70, 93, 0.15);
+    color: var(--red);
+    border-color: rgba(246, 70, 93, 0.2);
+  }
+
+  .card-badge.blue {
+    background: rgba(74, 158, 255, 0.15);
+    color: var(--blue);
+    border-color: rgba(74, 158, 255, 0.2);
+  }
+
+  .card-badge.muted {
+    background: rgba(132, 142, 156, 0.15);
+    color: var(--muted);
+    border-color: rgba(132, 142, 156, 0.2);
+  }
+
+  /* ==========================================
+     Status Bar (Full Width)
+     ========================================== */
+  .status-bar {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--gap);
+  }
+
+  .status-pill {
+    background: rgba(30, 32, 38, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: all 0.2s ease;
+  }
+
+  .status-pill:hover {
+    border-color: var(--glass-border-hover);
+    background: rgba(30, 32, 38, 0.7);
+  }
+
+  @supports not (backdrop-filter: blur(8px)) {
+    .status-pill { background: var(--surface); }
+  }
+
+  .glow-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .glow-dot.green {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green), 0 0 16px var(--green);
+  }
+
+  .glow-dot.blue {
+    background: var(--blue);
+    box-shadow: 0 0 8px var(--blue), 0 0 16px var(--blue);
+  }
+
+  .glow-dot.gold {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent), 0 0 16px var(--accent);
+  }
+
+  .glow-dot.red {
+    background: var(--red);
+    box-shadow: 0 0 8px var(--red), 0 0 16px var(--red);
+  }
+
+  .status-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .status-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .status-pill-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  /* ==========================================
+     x402 Budget Hero Card
+     ========================================== */
+  .hero-card {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+
+  .progress-track {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 1rem 0;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+  }
+
+  #budget-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--accent), #D4A009);
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 12px rgba(240, 185, 11, 0.3);
+  }
+
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  }
+
+  .metric-row:last-child { border-bottom: none; }
+
+  .metric-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--secondary);
+  }
+
+  .metric-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .metric-value.green { color: var(--green); }
+  .metric-value.red { color: var(--red); }
+  .metric-value.accent { color: var(--accent); }
+  .metric-value.muted { color: var(--muted); }
+
+  /* ==========================================
+     Data Quality Card
+     ========================================== */
+  .data-card {
+    grid-column: span 1;
+  }
+
+  /* ==========================================
+     Positions Card
+     ========================================== */
+  .positions-card {
+    grid-column: span 1;
+  }
+
+  /* ==========================================
+     Decision Stream (Full Width)
+     ========================================== */
+  .decision-stream {
+    grid-column: 1 / -1;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    min-width: 700px;
+  }
+
+  thead {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  th {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-align: left;
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+  }
+
+  tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+
+  .action-enter { color: var(--green); font-weight: 600; }
+  .action-exit { color: var(--red); font-weight: 600; }
+  .action-wait { color: var(--muted); }
+  .action-halt { color: var(--red); font-weight: 600; }
+
+  /* ==========================================
+     x402 ROI Card
+     ========================================== */
+  .roi-card {
+    grid-column: span 2;
+  }
+
+  .mini-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 60px;
+    margin-top: 1rem;
+    padding: 0.5rem 0;
+  }
+
+  .mini-bar {
+    flex: 1;
+    border-radius: 3px 3px 0 0;
+    background: var(--accent);
+    opacity: 0.6;
+    transition: opacity 0.2s ease, height 0.4s ease;
+    min-height: 4px;
+  }
+
+  .mini-bar:hover { opacity: 1; }
+
+  .mini-bar:nth-child(odd) { opacity: 0.8; }
+
+  /* ==========================================
+     Live Logs Card (Terminal)
+     ========================================== */
+  .logs-card {
+    grid-column: span 2;
+  }
+
+  #terminal {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px;
+    color: var(--secondary);
+    max-height: 200px;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+
+  #terminal::-webkit-scrollbar { width: 6px; }
+  #terminal::-webkit-scrollbar-track { background: transparent; }
+  #terminal::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+  #terminal::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+  .log-line {
+    padding: 0.15rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  }
+
+  .log-line:last-child { border-bottom: none; }
+
+  .log-key { color: var(--purple); }
+  .log-val { color: var(--text); }
+  .log-green { color: var(--green); }
+  .log-red { color: var(--red); }
+  .log-ts { color: var(--muted); margin-right: 0.5rem; }
+
+  /* ==========================================
+     Empty State
+     ========================================== */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 2rem 1rem;
+    color: var(--muted);
+    text-align: center;
+    flex: 1;
+  }
+
+  .empty-state svg {
+    width: 32px;
+    height: 32px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.5;
+  }
+
+  .empty-state p {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+  }
+
+  /* ==========================================
+     Footer
+     ========================================== */
+  footer {
+    text-align: center;
+    padding: 1.5rem var(--gap);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  #last-refresh {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ==========================================
+     Responsive Breakpoints
+     ========================================== */
+
+  /* Tablet: 768px – 1023px */
+  @media (max-width: 1023px) {
+    .bento-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .hero-card {
+      grid-column: span 2;
+      grid-row: span 1;
+    }
+    .data-card { grid-column: span 1; }
+    .positions-card { grid-column: span 1; }
+    .decision-stream { grid-column: 1 / -1; }
+    .roi-card { grid-column: span 2; }
+    .logs-card { grid-column: span 2; }
+    .status-bar {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  /* Mobile: < 768px */
+  @media (max-width: 767px) {
+    .bento-grid {
+      grid-template-columns: 1fr;
+    }
+    .hero-card,
+    .data-card,
+    .positions-card,
+    .roi-card,
+    .logs-card,
+    .status-bar {
+      grid-column: 1 / -1;
+      grid-row: auto;
+    }
+    .status-bar {
+      grid-template-columns: 1fr;
+    }
+    .nav-links { display: none; }
+    .hamburger { display: flex; }
+    .nav-right { gap: 0.5rem; }
+    #status-dot { display: none; }
+    main {
+      padding-left: 0.75rem;
+      padding-right: 0.75rem;
+    }
+    .card { padding: 1rem; }
+    .card-title { font-size: 13px; }
+    .metric-value { font-size: 13px; }
+  }
+
+  /* Desktop nav visible */
+  @media (min-width: 768px) {
+    .mobile-nav-overlay { display: none !important; }
+  }
+
+/* ==========================================
+   Utility Color Classes (for JS dynamic classes)
+   ========================================== */
+.green { color: var(--green) !important; }
+.red { color: var(--red) !important; }
+.yellow { color: var(--accent) !important; }
+.purple { color: var(--purple) !important; }
+.blue { color: var(--blue) !important; }
+.muted { color: var(--muted) !important; }
+.pos { color: var(--green) !important; }
+.neg { color: var(--red) !important; }
+
+/* Progress bar fill states */
+#budget-fill.filled { background: linear-gradient(90deg, var(--accent), #D4A009); }
+#budget-fill.yellow { background: linear-gradient(90deg, var(--accent), #ffcc00); box-shadow: 0 0 12px rgba(255, 204, 0, 0.4); }
+#budget-fill.red { background: linear-gradient(90deg, var(--red), #ff4466); box-shadow: 0 0 12px rgba(246, 70, 93, 0.4); }
+
+/* Mini bar chart colors */
+.mini-bar.pos { background: var(--green); opacity: 0.8; }
+.mini-bar.neg { background: var(--red); opacity: 0.8; }
+
+/* Empty chart placeholder */
+.empty-chart {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 60px;
+  color: var(--muted);
+  font-size: 12px;
+  width: 100%;
+}
+
+/* Positions table (rendered by JS) */
+.positions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.positions-table th {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.positions-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.positions-table tfoot td {
+  border-top: 2px solid rgba(255, 255, 255, 0.08);
+  border-bottom: none;
+  font-weight: 600;
+  padding-top: 0.75rem;
+}
+.positions-table .pos { color: var(--green); font-weight: 600; }
+.positions-table .neg { color: var(--red); font-weight: 600; }
+
+/* Decision table action colors (rendered by JS) */
+td.green { color: var(--green); font-weight: 600; }
+td.red { color: var(--red); font-weight: 600; }
+td.yellow { color: var(--accent); font-weight: 600; }
+td.muted { color: var(--muted); }
+
+/* Log line coloring */
+.log-line.green { color: var(--green); }
+.log-line.red { color: var(--red); }
+.log-line.yellow { color: var(--accent); }
+
+/* Mobile nav overlay active link */
+.mobile-nav-overlay a.active { color: var(--accent); background: rgba(255, 255, 255, 0.05); }
+
+</style>
+</head>
+<body>
+
+<!-- ==========================================
+     Top Navigation Bar
+     ========================================== -->
+<nav id="top-nav">
+  <div class="nav-left">
+    <div class="logo">
+      <div class="logo-mark">CA</div>
+      <span class="brand-name">Cascade AI</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="#" class="active">Dashboard</a></li>
+      <li><a href="#">Positions</a></li>
+      <li><a href="#">x402</a></li>
+      <li><a href="#">Logs</a></li>
+      <li><a href="#">Chat</a></li>
+    </ul>
+  </div>
+
+  <div class="nav-right">
+    <div id="nav-status-dot"></div>
+    <span id="mode-badge">Live</span>
+    <button class="hamburger" id="hamburger" aria-label="Menu" onclick="document.getElementById('mobile-nav').classList.toggle('open')">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- Mobile Nav Overlay -->
+<div class="mobile-nav-overlay" id="mobile-nav">
+  <a href="#" class="active">Dashboard</a>
+  <a href="#">Positions</a>
+  <a href="#">x402</a>
+  <a href="#">Logs</a>
+  <a href="#">Chat</a>
+</div>
+
+<!-- ==========================================
+     Main Bento Grid
+     ========================================== -->
+<main>
+  <div class="bento-grid">
+
+    <!-- Status Bar -->
+    <div class="status-bar card" style="padding:1rem;">
+      <div class="status-pill">
+        <div class="glow-dot green" id="status-dot"></div>
+        <div class="status-pill-text">
+          <span class="status-label">Status</span>
+          <span class="status-value" id="status-text">Online</span>
+        </div>
+      </div>
+      <div class="status-pill">
+        <div class="glow-dot blue"></div>
+        <div class="status-pill-text">
+          <span class="status-label">Last Cycle</span>
+          <span class="status-value" id="last-cycle">—</span>
+        </div>
+      </div>
+      <div class="status-pill">
+        <div class="glow-dot gold"></div>
+        <div class="status-pill-text">
+          <span class="status-label">Positions</span>
+          <span class="status-value" id="positions-count">0</span>
+        </div>
+      </div>
+      <div class="status-pill">
+        <div class="glow-dot red"></div>
+        <div class="status-pill-text">
+          <span class="status-label">Drawdown</span>
+          <span class="status-value" id="drawdown">0.00%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- x402 Budget Hero Card -->
+    <div class="card hero-card">
+      <div class="card-header">
+        <div class="card-title-wrap">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M7 7l10 10M17 7L7 17"/></svg>
+            x402 Micropayments
+          </div>
+        </div>
+        <span class="card-badge purple" id="budget-badge">Healthy</span>
+      </div>
+      <div class="progress-track">
+        <div id="budget-fill"></div>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Daily Budget</span>
+        <span class="metric-value" id="budget-daily">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Spent</span>
+        <span class="metric-value" id="budget-spent">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Remaining</span>
+        <span class="metric-value" id="budget-remaining">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Cost / Call</span>
+        <span class="metric-value" id="cost-per-call">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Calls Today</span>
+        <span class="metric-value" id="calls-today">0</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Circuit Breaker</span>
+        <span class="metric-value" id="circuit-status">Closed</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Total Spend</span>
+        <span class="metric-value accent" id="total-spend">$0.00</span>
+      </div>
+    </div>
+
+    <!-- Data Quality Card -->
+    <div class="card data-card">
+      <div class="card-header">
+        <div class="card-title-wrap">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+            Data Quality
+          </div>
+        </div>
+        <span class="card-badge green" id="data-badge">x402</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Snapshot Age</span>
+        <span class="metric-value" id="snapshot-age">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Source</span>
+        <span class="metric-value" id="data-source">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Regime</span>
+        <span class="metric-value" id="regime">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">FGI</span>
+        <span class="metric-value" id="fgi">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Risk State</span>
+        <span class="metric-value" id="risk-state">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Strategy</span>
+        <span class="metric-value" id="strategy">—</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Technicals</span>
+        <span class="metric-value" id="technicals">—</span>
+      </div>
+    </div>
+
+    <!-- Positions Card -->
+    <div class="card positions-card">
+      <div class="card-header">
+        <div class="card-title-wrap">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+            Positions — Live P&L
+          </div>
+        </div>
+        <span class="card-badge muted" id="pos-badge">0</span>
+      </div>
+      <div id="positions-body">
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          <p>No open positions.<br>Waiting for next signal...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Decision Stream -->
+    <div class="card decision-stream">
+      <div class="card-header">
+        <div class="card-title-wrap">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+            Autonomous Decision Stream
+          </div>
+        </div>
+        <span class="card-badge" id="decision-count">0</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Action</th>
+              <th>Symbol</th>
+              <th>Regime</th>
+              <th>Score</th>
+              <th>Reason</th>
+              <th>Mode</th>
+            </tr>
+          </thead>
+          <tbody id="decision-tbody">
+            <tr>
+              <td colspan="7">
+                <div class="empty-state" style="padding:1.5rem;">
+                  <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                  <p>No decisions yet.</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- x402 ROI Card -->
+    <div class="card roi-card">
+      <div class="card-header">
+        <div class="card-title-wrap">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M18 20V4M6 20v-6"/></svg>
+            x402 ROI Attribution
+          </div>
+        </div>
+        <span class="card-badge" id="roi-badge">x402</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Total Spend</span>
+        <span class="metric-value" id="roi-spend">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Realized P&L</span>
+        <span class="metric-value" id="roi-pnl">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Net After Cost</span>
+        <span class="metric-value" id="roi-net">$0.00</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Win Rate x402</span>
+        <span class="metric-value" id="win-x402">0%</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Win Rate Keyless</span>
+        <span class="metric-value" id="win-keyless">0%</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Trades Closed</span>
+        <span class="metric-value" id="trades-closed">0</span>
+      </div>
+      <div class="mini-chart" id="roi-chart">
+        <div class="mini-bar" style="height:20%"></div>
+        <div class="mini-bar" style="height:40%"></div>
+        <div class="mini-bar" style="height:30%"></div>
+        <div class="mini-bar" style="height:60%"></div>
+        <div class="mini-bar" style="height:45%"></div>
+        <div class="mini-bar" style="height:80%"></div>
+        <div class="mini-bar" style="height:55%"></div>
+        <div class="mini-bar" style="height:70%"></div>
+        <div class="mini-bar" style="height:35%"></div>
+        <div class="mini-bar" style="height:50%"></div>
+      </div>
+    </div>
+
+    <!-- Live Logs Card -->
+    <div class="card logs-card">
+      <div class="card-header">
+        <div class="card-title-wrap">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            Live Logs
+          </div>
+        </div>
+        <span class="card-badge muted" id="log-badge">0</span>
+      </div>
+      <div id="terminal">
+        <div class="log-line">
+          <span class="log-ts">--:--:--</span>
+          <span class="log-muted">Waiting for logs...</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- ==========================================
+     Footer
+     ========================================== -->
+<footer>
+  Cascade AI — BNB Hackathon v2 · Last refresh: <span id="last-refresh">—</span>
+</footer>
+
+<script>
+/*
+  Cascade AI Dashboard — Complete JavaScript
+  Data fetching, parsing, state management, and DOM rendering.
+  No external dependencies. Vanilla JS only.
+  Designed to be dropped into a <script> tag at the bottom of <body>.
+*/
+
+// ============================================================
+// 1. DATA FETCHERS
+// ============================================================
+
+/**
+ * Fetch health endpoint. Returns JSON or null on error.
+ */
+async function fetchHealth() {
+  try {
+    const res = await fetch('/health');
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Fetch logs endpoint. Returns {lines: [...]} or null on error.
+ */
+async function fetchLogs() {
+  try {
+    const res = await fetch('/logs');
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Fetch text content from a relative path.
+ * e.g. fetchFile('logs/x402_spend.json')
+ */
+async function fetchFile(path) {
+  try {
+    const res = await fetch(path);
+    if (!res.ok) return null;
+    return await res.text();
+  } catch (e) {
+    return null;
+  }
+}
+
+// ============================================================
+// 2. JSONL PARSER
+// ============================================================
+
+/**
+ * Parse JSONL text: split by newline, JSON.parse each line, filter out nulls.
+ */
+function parseJSONL(text) {
+  if (!text) return [];
+  const lines = text.split('\n');
+  const result = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    try {
+      const obj = JSON.parse(line);
+      if (obj !== null) result.push(obj);
+    } catch (e) {
+      // Skip malformed lines
+    }
+  }
+  return result;
+}
+
+// ============================================================
+// 3. GLOBAL STATE
+// ============================================================
+
+const state = {
+  health: {},
+  decisions: [],
+  x402Spend: {},
+  x402Calls: [],
+  positions: [],
+  trades: [],
+  logs: [],
+  startTime: Date.now(),
+  lastCycle: null,
+};
+
+// ============================================================
+// 4. FORMATTERS
+// ============================================================
+
+const fmt = {
+  /**
+   * HH:MM:SS from ISO string or timestamp.
+   */
+  time(ts) {
+    if (!ts) return '--:--:--';
+    let d;
+    if (typeof ts === 'number') {
+      d = new Date(ts);
+    } else {
+      d = new Date(ts);
+    }
+    if (isNaN(d.getTime())) return '--:--:--';
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  },
+
+  /**
+   * "Xs ago", "Xm ago", "Xh ago" from ISO string or timestamp.
+   */
+  ago(ts) {
+    if (!ts) return 'Never';
+    let d;
+    if (typeof ts === 'number') {
+      d = new Date(ts);
+    } else {
+      d = new Date(ts);
+    }
+    if (isNaN(d.getTime())) return 'Never';
+    const now = Date.now();
+    const diff = Math.floor((now - d.getTime()) / 1000);
+    if (diff < 0) return 'Now';
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  },
+
+  /**
+   * "$0.00" with 2 decimals.
+   */
+  usd(n) {
+    if (n === null || n === undefined || isNaN(n)) return '$0.00';
+    const num = Number(n);
+    return '$' + num.toFixed(2);
+  },
+
+  /**
+   * "+0.00%" or "-0.00%"
+   */
+  pct(n) {
+    if (n === null || n === undefined || isNaN(n)) return '+0.00%';
+    const num = Number(n);
+    const sign = num >= 0 ? '+' : '';
+    return `${sign}${num.toFixed(2)}%`;
+  },
+
+  /**
+   * Comma-separated integer.
+   */
+  num(n) {
+    if (n === null || n === undefined || isNaN(n)) return '0';
+    return Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  },
+};
+
+// ============================================================
+// 5. RENDER FUNCTIONS
+// ============================================================
+
+/**
+ * Helper: safely get element by ID, return null if not found.
+ */
+function el(id) {
+  return document.getElementById(id) || null;
+}
+
+/**
+ * Helper: set text content of an element if it exists.
+ */
+function setText(id, text) {
+  const element = el(id);
+  if (element) element.textContent = text;
+}
+
+/**
+ * Helper: set HTML content of an element if it exists.
+ */
+function setHTML(id, html) {
+  const element = el(id);
+  if (element) element.innerHTML = html;
+}
+
+/**
+ * Helper: remove all classes and add a single class.
+ */
+function setClass(id, className) {
+  const element = el(id);
+  if (!element) return;
+  element.className = className;
+}
+
+// ------------------------------------------------------------
+// 5.1 renderStatusBar
+// ------------------------------------------------------------
+
+function renderStatusBar() {
+  const health = state.health || {};
+  const status = health.status || 'offline';
+  const mode = health.mode || 'paper';
+  const lastCycle = health.last_cycle || state.lastCycle || null;
+  const positions = health.positions || 0;
+  const drawdown = health.drawdown_pct || 0;
+
+  // Status dot and text
+  const dot = el('status-dot');
+  if (dot) {
+    dot.className = 'glow-dot';
+    if (status === 'running' || status === 'online') {
+      dot.style.color = 'var(--green)';
+      dot.style.background = 'var(--green)';
+    } else if (status === 'starting' || status === 'initializing') {
+      dot.style.color = 'var(--accent)';
+      dot.style.background = 'var(--accent)';
+    } else {
+      dot.style.color = 'var(--red)';
+      dot.style.background = 'var(--red)';
+    }
+  }
+
+  const statusText = el('status-text');
+  if (statusText) {
+    statusText.textContent = status === 'running' || status === 'online'
+      ? 'Online'
+      : status === 'starting' || status === 'initializing'
+      ? 'Starting'
+      : 'Offline';
+  }
+
+  // Mode badge
+  const modeBadge = el('mode-badge');
+  if (modeBadge) {
+    if (mode === 'live' || mode === 'Live') {
+      modeBadge.textContent = '🔴 Live';
+      modeBadge.style.color = 'var(--red)';
+    } else {
+      modeBadge.textContent = '🧪 Paper';
+      modeBadge.style.color = 'var(--blue)';
+    }
+  }
+
+  // Last cycle
+  setText('last-cycle', lastCycle ? fmt.ago(lastCycle) : 'Never');
+
+  // Positions count
+  setText('positions-count', String(positions));
+
+  // Drawdown with color class
+  const drawdownEl = el('drawdown');
+  if (drawdownEl) {
+    drawdownEl.textContent = fmt.pct(drawdown);
+    drawdownEl.classList.remove('green', 'red', 'yellow');
+    if (drawdown < 5) {
+      drawdownEl.classList.add('green');
+    } else if (drawdown <= 10) {
+      drawdownEl.classList.add('yellow');
+    } else {
+      drawdownEl.classList.add('red');
+    }
+  }
+}
+
+// ------------------------------------------------------------
+// 5.2 renderBudget
+// ------------------------------------------------------------
+
+function renderBudget() {
+  const spend = state.x402Spend || {};
+  const dailyBudget = spend.daily_budget_usdc || 0;
+  const dailySpend = spend.daily_spend_usdc || 0;
+  const totalSpend = spend.total_spend_usdc || 0;
+  const remaining = Math.max(0, dailyBudget - dailySpend);
+
+  // Calculate calls today from x402Calls
+  const calls = state.x402Calls || [];
+  let callsToday = 0;
+  if (calls.length > 0) {
+    // Try to count calls with today's date or just total if no date filtering
+    callsToday = calls.length;
+  }
+  // If health has daily_trades, use that as fallback
+  if (state.health && state.health.daily_trades) {
+    callsToday = state.health.daily_trades;
+  }
+
+  // Budget metrics
+  setText('budget-daily', fmt.usd(dailyBudget));
+  setText('budget-spent', fmt.usd(dailySpend));
+  setText('budget-remaining', fmt.usd(remaining));
+  setText('total-spend', fmt.usd(totalSpend));
+  setText('calls-today', fmt.num(callsToday));
+  setText('cost-per-call', '$0.015');
+
+  // Budget fill bar
+  const fillPct = dailyBudget > 0 ? Math.min(100, (dailySpend / dailyBudget) * 100) : 0;
+  const fillEl = el('budget-fill');
+  if (fillEl) {
+    fillEl.style.width = `${fillPct}%`;
+    fillEl.classList.remove('filled', 'yellow', 'red');
+    if (fillPct >= 100) {
+      fillEl.classList.add('red');
+    } else if (fillPct >= 80) {
+      fillEl.classList.add('yellow');
+    } else {
+      fillEl.classList.add('filled');
+    }
+  }
+
+  // Budget badge
+  const badgeEl = el('budget-badge');
+  if (badgeEl) {
+    badgeEl.classList.remove('green', 'red', 'yellow', 'purple', 'blue', 'muted');
+    if (fillPct >= 100) {
+      badgeEl.textContent = 'Exhausted';
+      badgeEl.classList.add('red');
+    } else if (fillPct >= 80) {
+      badgeEl.textContent = 'Throttling';
+      badgeEl.classList.add('yellow');
+    } else {
+      badgeEl.textContent = 'Healthy';
+      badgeEl.classList.add('green');
+    }
+  }
+
+  // Circuit status (derived from risk_state or health status)
+  const circuitEl = el('circuit-status');
+  if (circuitEl) {
+    const riskState = state.health && state.health.risk_state ? state.health.risk_state : 'normal';
+    circuitEl.classList.remove('green', 'red', 'yellow');
+    if (riskState === 'kill_switch' || riskState === 'tripped' || fillPct >= 100) {
+      circuitEl.textContent = 'Tripped';
+      circuitEl.classList.add('red');
+    } else {
+      circuitEl.textContent = 'Active';
+      circuitEl.classList.add('green');
+    }
+  }
+}
+
+// ------------------------------------------------------------
+// 5.3 renderDataQuality
+// ------------------------------------------------------------
+
+function renderDataQuality() {
+  const health = state.health || {};
+  const decisions = state.decisions || [];
+  const lastDecision = decisions.length > 0 ? decisions[decisions.length - 1] : null;
+  const lastTs = lastDecision ? lastDecision.timestamp : null;
+
+  // Snapshot age
+  setText('snapshot-age', lastTs ? fmt.ago(lastTs) : 'No data');
+
+  // Determine data source from last decision or health
+  let source = 'keyless-only';
+  let badgeText = 'Keyless';
+  let badgeClass = 'muted';
+
+  if (lastDecision) {
+    if (lastDecision.x402_enriched === true || lastDecision.mode === 'x402') {
+      source = 'x402-enriched';
+      badgeText = 'x402';
+      badgeClass = 'purple';
+    } else if (lastDecision.mode === 'keyless' || lastDecision.mode === 'paper') {
+      source = 'keyless-only';
+      badgeText = 'Keyless';
+      badgeClass = 'muted';
+    }
+  }
+  if (health.mode === 'live' && health.sentiment_fgi) {
+    source = 'x402-enriched';
+    badgeText = 'x402';
+    badgeClass = 'purple';
+  }
+
+  setText('data-source', source);
+  const dataBadge = el('data-badge');
+  if (dataBadge) {
+    dataBadge.classList.remove('green', 'red', 'yellow', 'purple', 'blue', 'muted');
+    dataBadge.textContent = badgeText;
+    dataBadge.classList.add(badgeClass);
+  }
+
+  // Regime
+  const regime = lastDecision ? (lastDecision.regime || 'N/A') : (health.regime || 'N/A');
+  setText('regime', String(regime));
+
+  // FGI
+  const fgi = health.sentiment_fgi || (lastDecision ? lastDecision.sentiment_fgi : null) || 'N/A';
+  setText('fgi', String(fgi));
+
+  // Strategy
+  const strategy = lastDecision ? (lastDecision.strategy || lastDecision.mode || 'N/A') : (health.strategy || 'N/A');
+  setText('strategy', String(strategy));
+
+  // Technicals
+  const technicals = lastDecision ? (lastDecision.technicals || lastDecision.reasons || 'N/A') : 'N/A';
+  setText('technicals', String(technicals));
+
+  // Risk state
+  const riskState = lastDecision ? (lastDecision.risk_state || 'normal') : (health.risk_state || 'normal');
+  const riskEl = el('risk-state');
+  if (riskEl) {
+    riskEl.textContent = String(riskState);
+    riskEl.classList.remove('green', 'red', 'yellow');
+    if (riskState === 'kill_switch' || riskState === 'critical') {
+      riskEl.classList.add('red');
+    } else if (riskState === 'throttle' || riskState === 'warning') {
+      riskEl.classList.add('yellow');
+    } else {
+      riskEl.classList.add('green');
+    }
+  }
+}
+
+// ------------------------------------------------------------
+// 5.4 renderPositions
+// ------------------------------------------------------------
+
+function renderPositions() {
+  const positions = state.positions || [];
+  const body = el('positions-body');
+  if (!body) return;
+
+  // Update badge
+  const badge = el('pos-badge');
+  if (badge) {
+    badge.textContent = String(positions.length);
+  }
+
+  if (positions.length === 0) {
+    // Empty state
+    body.innerHTML = `
+      <div class="empty-state">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+        </svg>
+        <p>No open positions</p>
+        <span class="muted">Waiting for next cycle...</span>
+      </div>
+    `;
+    return;
+  }
+
+  // Build table rows
+  let rows = '';
+  for (let i = 0; i < positions.length; i++) {
+    const p = positions[i];
+    const symbol = p.symbol || 'N/A';
+    const entry = p.entry_price || p.entry || 0;
+    const size = p.size_usdc || p.size || p.quantity || 0;
+    const pnlPct = p.unrealized_pnl_pct || p.pnl_pct || 0;
+    const pnlClass = pnlPct >= 0 ? 'pos' : 'neg';
+
+    rows += `
+      <tr>
+        <td>${symbol}</td>
+        <td>${fmt.usd(entry)}</td>
+        <td>${fmt.usd(size)}</td>
+        <td class="${pnlClass}">${fmt.pct(pnlPct)}</td>
+      </tr>
+    `;
+  }
+
+  const portfolioValue = state.portfolioValue || 0;
+  const avgPnl = positions.length > 0 ? positions.reduce((sum, p) => sum + (p.unrealized_pnl_pct || p.pnl_pct || 0), 0) / positions.length : 0;
+
+  body.innerHTML = `
+    <table class="positions-table">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Entry</th>
+          <th>Size</th>
+          <th>P&L%</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+      <tfoot>
+        <tr class="summary">
+          <td colspan="2"><strong>Portfolio</strong></td>
+          <td colspan="2" class="${avgPnl >= 0 ? 'pos' : 'neg'}">${fmt.pct(avgPnl)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  `;
+}
+
+// ------------------------------------------------------------
+// 5.5 renderROI
+// ------------------------------------------------------------
+
+function renderROI() {
+  const trades = state.trades || [];
+  const spend = state.x402Spend || {};
+  const totalSpend = spend.total_spend_usdc || 0;
+
+  // Calculate metrics from trades
+  let totalPnl = 0;
+  let x402Wins = 0;
+  let x402Total = 0;
+  let keylessWins = 0;
+  let keylessTotal = 0;
+  let closedCount = 0;
+  const pnlValues = [];
+
+  for (let i = 0; i < trades.length; i++) {
+    const t = trades[i];
+    if (t.event === 'CLOSE' || t.exit_price) {
+      closedCount++;
+      const pnl = t.realized_pnl_usdc || t.pnl_usdc || 0;
+      totalPnl += pnl;
+      pnlValues.push(pnl);
+
+      if (t.x402_enriched === true) {
+        x402Total++;
+        if (pnl > 0) x402Wins++;
+      } else {
+        keylessTotal++;
+        if (pnl > 0) keylessWins++;
+      }
+    }
+  }
+
+  const net = totalPnl - totalSpend;
+
+  // Set metrics
+  setText('roi-spend', fmt.usd(totalSpend));
+  setText('roi-pnl', fmt.usd(totalPnl));
+
+  const netEl = el('roi-net');
+  if (netEl) {
+    netEl.textContent = fmt.usd(net);
+    netEl.className = net >= 0 ? 'pos' : 'neg';
+  }
+
+  const x402Rate = x402Total > 0 ? ((x402Wins / x402Total) * 100) : 0;
+  const keylessRate = keylessTotal > 0 ? ((keylessWins / keylessTotal) * 100) : 0;
+
+  setText('win-x402', fmt.pct(x402Rate));
+  setText('win-keyless', fmt.pct(keylessRate));
+  setText('trades-closed', fmt.num(closedCount));
+
+  // ROI badge
+  const badgeEl = el('roi-badge');
+  if (badgeEl) {
+    badgeEl.classList.remove('green', 'red', 'yellow', 'purple', 'blue', 'muted');
+    if (closedCount >= 3) {
+      badgeEl.textContent = 'Analyzed';
+      badgeEl.classList.add('green');
+    } else {
+      badgeEl.textContent = 'Pending';
+      badgeEl.classList.add('yellow');
+    }
+  }
+
+  // ROI chart: 10 bar divs, height proportional to average P&L in chunks
+  const chartEl = el('roi-chart');
+  if (chartEl) {
+    if (pnlValues.length === 0) {
+      chartEl.innerHTML = '<div class="empty-chart">No trade data yet</div>';
+    } else {
+      const chunkSize = Math.max(1, Math.ceil(pnlValues.length / 10));
+      let bars = '';
+      for (let i = 0; i < 10; i++) {
+        const start = i * chunkSize;
+        const end = Math.min(start + chunkSize, pnlValues.length);
+        if (start >= pnlValues.length) break;
+
+        let chunkSum = 0;
+        for (let j = start; j < end; j++) {
+          chunkSum += pnlValues[j];
+        }
+        const avg = chunkSum / (end - start);
+        const maxVal = Math.max(...pnlValues.map(Math.abs));
+        const heightPct = maxVal > 0 ? Math.min(100, (Math.abs(avg) / maxVal) * 100) : 0;
+        const barClass = avg >= 0 ? 'pos' : 'neg';
+
+        bars += `<div class="bar ${barClass}" style="height:${heightPct}%;" title="Avg: ${fmt.usd(avg)}"></div>`;
+      }
+      chartEl.innerHTML = bars;
+    }
+  }
+}
+
+// ------------------------------------------------------------
+// 5.6 renderDecisions
+// ------------------------------------------------------------
+
+function renderDecisions() {
+  const tbody = el('decision-tbody');
+  if (!tbody) return;
+
+  const decisions = state.decisions || [];
+  const count = decisions.length;
+
+  // Update badge
+  setText('decision-count', fmt.num(count));
+
+  if (count === 0) {
+    tbody.innerHTML = `
+      <tr class="empty-row">
+        <td colspan="7" style="text-align:center; padding:2rem 0;">
+          <div class="empty-state">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 8v4M12 16h.01"/>
+            </svg>
+            <p>No decisions yet</p>
+            <span class="muted">Cycle is running...</span>
+          </div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // Last 15 decisions, reversed (newest first)
+  const recent = decisions.slice(-15).reverse();
+
+  let rows = '';
+  for (let i = 0; i < recent.length; i++) {
+    const d = recent[i];
+    const ts = d.timestamp || d.ts || '';
+    const action = (d.action || 'WAIT').toUpperCase();
+    const symbol = d.symbol || 'N/A';
+    const regime = d.regime || 'N/A';
+    const score = d.entry_score || d.score || '-';
+    const reasons = d.reasons || d.reason || '';
+    const mode = d.mode || 'paper';
+    const riskState = d.risk_state || 'normal';
+
+    let actionClass = 'muted';
+    if (action === 'ENTER') actionClass = 'green';
+    else if (action === 'EXIT') actionClass = 'red';
+    else if (action === 'HALT') actionClass = 'red';
+    else if (action === 'WAIT') actionClass = 'muted';
+
+    const reasonText = String(reasons);
+    const truncated = reasonText.length > 40 ? reasonText.substring(0, 40) + '…' : reasonText;
+
+    rows += `
+      <tr>
+        <td class="muted">${fmt.time(ts)}</td>
+        <td class="${actionClass}">${action}</td>
+        <td>${symbol}</td>
+        <td>${regime}</td>
+        <td>${score}</td>
+        <td title="${reasonText}">${truncated}</td>
+        <td class="muted">${mode}</td>
+      </tr>
+    `;
+  }
+
+  tbody.innerHTML = rows;
+}
+
+// ------------------------------------------------------------
+// 5.7 renderTerminal
+// ------------------------------------------------------------
+
+function renderTerminal() {
+  const terminal = el('terminal');
+  if (!terminal) return;
+
+  const logs = state.logs || [];
+  setText('log-badge', fmt.num(logs.length));
+
+  if (logs.length === 0) {
+    terminal.innerHTML = '<div class="log-line muted"><span class="log-time">--:--:--</span> <span class="log-msg">Waiting for logs...</span></div>';
+    return;
+  }
+
+  // Last 12 log lines
+  const recent = logs.slice(-12);
+
+  let html = '';
+  for (let i = 0; i < recent.length; i++) {
+    const line = recent[i];
+    let ts = '';
+    let msg = line;
+
+    // Try to extract timestamp from beginning of log line (ISO or HH:MM:SS)
+    const timeMatch = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[\d\.Z+-]*)/);
+    if (timeMatch) {
+      ts = fmt.time(timeMatch[1]);
+      msg = line.substring(timeMatch[0].length).trim();
+    } else {
+      const shortMatch = line.match(/^(\d{2}:\d{2}:\d{2})/);
+      if (shortMatch) {
+        ts = shortMatch[1];
+        msg = line.substring(8).trim();
+      }
+    }
+
+    // If no timestamp found, use current time approximation
+    if (!ts) {
+      ts = fmt.time(Date.now() - (recent.length - i) * 1000);
+      msg = line;
+    }
+
+    // Color-code the message
+    let msgClass = '';
+    const upperMsg = msg.toUpperCase();
+    if (upperMsg.includes('ERROR') || upperMsg.includes('FAIL') || upperMsg.includes('KILL')) {
+      msgClass = 'red';
+    } else if (upperMsg.includes('WARN') || upperMsg.includes('THROTTLE')) {
+      msgClass = 'yellow';
+    } else if (upperMsg.includes('ENTER') || upperMsg.includes('PROFIT') || upperMsg.includes('WIN')) {
+      msgClass = 'green';
+    } else if (upperMsg.includes('EXIT') || upperMsg.includes('LOSS')) {
+      msgClass = 'red';
+    }
+
+    // Try to parse JSON in the message for better coloring
+    let coloredMsg = msg;
+    try {
+      const jsonStart = msg.indexOf('{');
+      if (jsonStart !== -1) {
+        const jsonStr = msg.substring(jsonStart);
+        const jsonObj = JSON.parse(jsonStr);
+        coloredMsg = msg.substring(0, jsonStart) + colorizeJSON(jsonObj);
+      }
+    } catch (e) {
+      // Not JSON, color inline key=value pairs
+      coloredMsg = colorizeInline(msg);
+    }
+
+    html += `<div class="log-line ${msgClass}"><span class="log-time">${ts}</span> <span class="log-msg">${coloredMsg}</span></div>`;
+  }
+
+  terminal.innerHTML = html;
+
+  // Auto-scroll to bottom
+  terminal.scrollTop = terminal.scrollHeight;
+}
+
+/**
+ * Colorize a JSON object as HTML spans.
+ */
+function colorizeJSON(obj) {
+  const pairs = [];
+  const keys = Object.keys(obj);
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    const v = obj[k];
+    let valStr = '';
+    if (typeof v === 'number') {
+      valStr = `<span class="${v >= 0 ? 'green' : 'red'}">${v}</span>`;
+    } else if (typeof v === 'string') {
+      if (v.toUpperCase() === 'ENTER' || v.toUpperCase() === 'BUY') {
+        valStr = `<span class="green">"${v}"</span>`;
+      } else if (v.toUpperCase() === 'EXIT' || v.toUpperCase() === 'SELL') {
+        valStr = `<span class="red">"${v}"</span>`;
+      } else {
+        valStr = `<span class="">"${v}"</span>`;
+      }
+    } else {
+      valStr = String(v);
+    }
+    pairs.push(`<span class="purple">${k}</span>: ${valStr}`);
+  }
+  return `{ ${pairs.join(', ')} }`;
+}
+
+/**
+ * Colorize inline key=value pairs in a log line.
+ */
+function colorizeInline(msg) {
+  // Color P&L values like +1.23% or -0.45%
+  let result = msg;
+  result = result.replace(/(\+[\d.]+)%/g, '<span class="green">+$1%</span>');
+  result = result.replace(/(-[\d.]+)%/g, '<span class="red">-$1%</span>');
+  result = result.replace(/(\$[\d.]+)/g, '<span class="">$1</span>');
+  result = result.replace(/(action=)(\w+)/gi, '$1<span class="green">$2</span>');
+  result = result.replace(/(symbol=)(\w+)/gi, '$1<span class="purple">$2</span>');
+  result = result.replace(/(pnl=)([\d.-]+)/gi, (m, p1, p2) => {
+    const n = parseFloat(p2);
+    return `${p1}<span class="${n >= 0 ? 'green' : 'red'}">${p2}</span>`;
+  });
+  return result;
+}
+
+// ============================================================
+// 6. MASTER LOADER
+// ============================================================
+
+async function loadAll() {
+  // Fetch all data sources in parallel
+  const [
+    healthData,
+    logsData,
+    spendText,
+    callsText,
+    decisionsText,
+    positionsText,
+    tradesText,
+  ] = await Promise.all([
+    fetchHealth(),
+    fetchLogs(),
+    fetchFile('logs/x402_spend.json'),
+    fetchFile('logs/x402_calls.jsonl'),
+    fetchFile('logs/decision_live.jsonl'),
+    fetchFile('logs/portfolio_snapshots.jsonl'),
+    fetchFile('logs/trade_outcomes.jsonl'),
+  ]);
+
+  // Update state: health
+  if (healthData) {
+    state.health = healthData;
+    if (healthData.last_cycle) {
+      state.lastCycle = healthData.last_cycle;
+    }
+  }
+
+  // Update state: logs
+  if (logsData && Array.isArray(logsData.lines)) {
+    state.logs = logsData.lines;
+  } else {
+    state.logs = [];
+  }
+
+  // Update state: x402 spend
+  if (spendText) {
+    try {
+      state.x402Spend = JSON.parse(spendText);
+    } catch (e) {
+      state.x402Spend = {};
+    }
+  } else {
+    state.x402Spend = {};
+  }
+
+  // Update state: x402 calls (JSONL)
+  state.x402Calls = callsText ? parseJSONL(callsText) : [];
+
+  // Update state: decisions (JSONL)
+  state.decisions = decisionsText ? parseJSONL(decisionsText) : [];
+
+  // Update state: positions from portfolio snapshots
+  if (positionsText) {
+    const snaps = parseJSONL(positionsText);
+    if (snaps.length > 0) {
+      const latest = snaps[snaps.length - 1];
+      state.positions = latest.open_positions || [];
+      state.portfolioValue = latest.portfolio_value_usdc || 0;
+      if (!state.health.positions && latest.open_positions) {
+        state.health.positions = latest.open_positions.length;
+      }
+    } else {
+      state.positions = [];
+      state.portfolioValue = 0;
+    }
+  } else {
+    state.positions = [];
+    state.portfolioValue = 0;
+  }
+
+  // Update state: trades (JSONL)
+  state.trades = tradesText ? parseJSONL(tradesText) : [];
+
+  // Render all panels in order
+  renderStatusBar();
+  renderBudget();
+  renderDataQuality();
+  renderPositions();
+  renderROI();
+  renderDecisions();
+  renderTerminal();
+
+  // Update last refresh timestamp
+  setText('last-refresh', fmt.time(Date.now()));
+}
+
+// ============================================================
+// 7. INITIALIZATION
+// ============================================================
+
+function init() {
+  // Initial load
+  loadAll();
+
+  // Auto-refresh every 5 seconds
+  setInterval(loadAll, 5000);
+
+  // Nav click handlers: toggle .active class
+  const navLinks = document.querySelectorAll('.nav-links a, .mobile-nav-overlay a');
+  navLinks.forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      // Remove active from all nav links
+      document.querySelectorAll('.nav-links a, .mobile-nav-overlay a').forEach(function(l) {
+        l.classList.remove('active');
+      });
+      // Add active to clicked link (same text content)
+      const text = link.textContent.trim();
+      document.querySelectorAll('.nav-links a, .mobile-nav-overlay a').forEach(function(l) {
+        if (l.textContent.trim() === text) {
+          l.classList.add('active');
+        }
+      });
+    });
+  });
+}
+
+// Start on DOM ready
+// Mobile nav hamburger toggle
+document.addEventListener('click', function(e) {
+  const hamburger = e.target.closest('#hamburger');
+  if (hamburger) {
+    document.getElementById('mobile-nav').classList.toggle('open');
+    return;
+  }
+  // Close mobile nav when clicking outside
+  const mobileNav = document.getElementById('mobile-nav');
+  if (mobileNav && mobileNav.classList.contains('open') && !e.target.closest('#mobile-nav') && !e.target.closest('#hamburger')) {
+    mobileNav.classList.remove('open');
+  }
+});
+
+document.addEventListener('DOMContentLoaded', init);
+
+</script>
+</body>
+</html>
