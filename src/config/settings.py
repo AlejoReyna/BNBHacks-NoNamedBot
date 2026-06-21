@@ -58,7 +58,7 @@ class Settings(BaseModel):
     # factor fails closed on every token. Roughly doubles x402 calls per
     # enrichment batch; still governor-gated. Set false to disable.
     x402_fetch_technicals: bool = True
-    x402_technicals_max_symbols: int = 15
+    x402_technicals_max_symbols: int = 30
     # Per-cycle cost tracking: maximum latency (seconds) between snapshot assembly
     # and entry decision before the data is considered stale and entry is skipped.
     max_decision_latency_seconds: float = 60.0
@@ -332,7 +332,7 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         "x402_hot_refresh_age_seconds": _get_int("X402_HOT_REFRESH_AGE_SECONDS", 360),
         "x402_enrich_top_n": _get_int("X402_ENRICH_TOP_N", 50),
         "x402_fetch_technicals": _get_bool("X402_FETCH_TECHNICALS", True),
-        "x402_technicals_max_symbols": _get_int("X402_TECHNICALS_MAX_SYMBOLS", 15),
+        "x402_technicals_max_symbols": _get_int("X402_TECHNICALS_MAX_SYMBOLS", 30),
         "max_decision_latency_seconds": _get_float("MAX_DECISION_LATENCY_SECONDS", 60.0),
         "regime_aware_ttl": _get_bool("REGIME_AWARE_TTL", True),
         "cost_benefit_check_enabled": _get_bool("COST_BENEFIT_CHECK_ENABLED", True),
