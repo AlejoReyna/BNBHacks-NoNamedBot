@@ -36,7 +36,7 @@ class Settings(BaseModel):
     # Data budget follows the 25%-of-AUM principle: $20 AUM × 25% = $5 total
     # data budget over 7 days = $5/7 ≈ $0.714/day. The remaining $15 is for
     # trading capital (position sizing) — untouched by x402 spend.
-    x402_daily_budget_usdc: float = round(5.0 / 7, 6)  # ≈ 0.714286
+    x402_daily_budget_usdc: float = 1.0
     x402_total_budget_usdc: float = 5.0
     x402_failure_cooldown_seconds: int = 900
     x402_in_position_ttl_seconds: int = 1800
@@ -324,7 +324,7 @@ def load_settings(dotenv_path: str | None = None) -> Settings:
         ),
         "cmc_x402_chain_id": _get_int("CMC_X402_CHAIN_ID", 8453),
         "cmc_x402_max_usdc_per_call": _get_float("CMC_X402_MAX_USDC_PER_CALL", 0.015),
-        "x402_daily_budget_usdc": _get_float("X402_DAILY_BUDGET_USDC", round(5.0 / 7, 6)),
+        "x402_daily_budget_usdc": _get_float("X402_DAILY_BUDGET_USDC", 1.0),
         "x402_total_budget_usdc": _get_float("X402_TOTAL_BUDGET_USDC", 5.0),
         "x402_failure_cooldown_seconds": _get_int("X402_FAILURE_COOLDOWN_SECONDS", 900),
         "x402_in_position_ttl_seconds": _get_int("X402_IN_POSITION_TTL_SECONDS", 1800),

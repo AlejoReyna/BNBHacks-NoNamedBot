@@ -283,7 +283,7 @@ def _print_x402_wallet_section(settings: Settings) -> None:
         from src.data.x402_spend_governor import X402SpendGovernor
 
         ledger = X402SpendGovernor(
-            daily_budget_usdc=getattr(settings, "x402_daily_budget_usdc", round(5.0 / 7, 6)),
+            daily_budget_usdc=getattr(settings, "x402_daily_budget_usdc", 1.0),
             total_budget_usdc=getattr(settings, "x402_total_budget_usdc", 5.0),
             cost_per_call_usdc=settings.cmc_x402_amount,
             failure_cooldown_seconds=getattr(settings, "x402_failure_cooldown_seconds", 900),
@@ -2265,8 +2265,8 @@ def _fetch_snapshot(
             n_opt = max(REGIME_N_MAP.get(regime_value, n_opt), n_opt)
         # HACKATHON DEMO: force minimum enrichment when entries allowed so judges
         # see the 6-factor algorithm evaluating symbols with paid data.
-        if entries_allowed and n_opt < 20:
-            n_opt = 20
+        if entries_allowed and n_opt < 5:
+            n_opt = 5
         if n_opt < 1:
             LOGGER.info("Regime/keyless-only mode: n_opt=0; skipping paid enrichment")
             enrich_symbols = set()

@@ -103,6 +103,7 @@ def start_health_server(
                 return
             reply = build_chat_reply(
                 str(body.get("message", "")),
+                session_id=str(body.get("session_id", "default")),
                 health_snapshot=state.snapshot(),
                 decision_log_path=decision_path,
             )
