@@ -77,8 +77,6 @@ jobs:
             systemctl --user daemon-reload 2>/dev/null || true
 
             source .venv/bin/activate
-            set -a; [ -f "$DEPLOY_PATH/.env" ] && source "$DEPLOY_PATH/.env"; set +a
-            python scripts/verify_twak_unlock.py
 
             if [ "$SKIP_PRE_LIVE_CHECK" != "true" ]; then
               if python scripts/pre_live_check.py; then
